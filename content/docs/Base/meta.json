@@ -1,0 +1,27 @@
+{
+  "title": "Framework",
+  "description": "The docs framework",
+  "icon": "Building",
+  "root": true,
+  "pages": [
+    "---快速入门---",
+    "index",
+    "create-react-project",
+    "comparisons",
+    "---Setup---",
+    "manual-installation",
+    "...",
+    "(integrations)",
+    "---Writing---",
+    "page-conventions",
+    "markdown",
+    "navigation",
+    "---UI---",
+    "customisation",
+    "theme",
+    "search",
+    "components",
+    "mdx",
+    "layouts"
+  ]
+}

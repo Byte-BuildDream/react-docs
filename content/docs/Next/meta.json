@@ -1,0 +1,27 @@
+{
+  "title": "Next.js 入门指南",
+  "description": "Next.js 入门指南",
+  "icon": "GraduationCap",
+  "root": true,
+  "pages": [
+    "---入门---",
+    "index",
+    "project-structure",
+    "layouts-and-pages",
+    "---Supabase---",
+    "manual-installation",
+    "...",
+    "(integrations)",
+    "---Writing---",
+    "page-conventions",
+    "markdown",
+    "navigation",
+    "---UI---",
+    "customisation",
+    "theme",
+    "search",
+    "components",
+    "mdx",
+    "layouts"
+  ]
+}
