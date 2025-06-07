@@ -3,129 +3,230 @@ title: Supabase 介绍
 icon: CircleHelp
 ---
 
-
-
 ## 关于 Supabase
 > Supabase 是 Firebase 的开源替代方案。您可以使用 Postgres 数据库、身份验证、即时 API、边缘函数、实时订阅、存储和向量嵌入来启动您的项目。
 
-
-
-它提供了一整套后端即服务 (BaaS - Backend as a Service) 的工具，让你能够快速构建应用程序的后端，而无需自己从头搭建和管理服务器、数据库等基础设施。
-Supabase 的核心是 **强大的 PostgreSQL 数据库** ，并在此基础上提供了一系列围绕数据、用户、文件和自定义逻辑的功能。
+它提供了一整套后端即服务 (BaaS - Backend as a Service) 的工具，让您能够快速构建应用程序的后端，而无需自己从头搭建和管理服务器、数据库等基础设施。Supabase 的核心是 **强大的 PostgreSQL 数据库** ，并在此基础上提供了一系列围绕数据、用户、文件和自定义逻辑的功能。
 
 <Cards>
   <Card
     icon={<Github />}
     href="https://github.com/supabase/supabase"
     title="Github 仓库"
-  >
-    Github 仓库地址
-  </Card>
+  />
   <Card
     icon={<Globe />}
     href="https://supabase.com"
     title="Supabase 官网"
-  >
-    Supabase 官网
-  </Card>
+  />
   <Card
     icon={<Book />}
     href="https://supabase.com/docs"
     title="Supabase 文档"
-  >
-    Supabase 文档
-  </Card>
- <Card
+  />
+  <Card
     icon={<Telescope />}
     href="https://github.com/supabase/supabase/discussions"
     title="Supabase 论坛"
-  >
-    Supabase 论坛
-  </Card>
+  />
 </Cards>
-
 
 ## 为什么选择 Supabase？
 
-开源和可移植性：
+### 开源和可移植性
+- 核心技术栈是开源的，这意味着您拥有更大的控制权。
+- 可以选择使用 Supabase 官方的托管服务，也可以选择在自己的服务器上进行自托管 (self-hosting)。
 
-核心技术栈是开源的，这意味着你拥有更大的控制权。
-你可以选择使用 Supabase 官方的托管服务，也可以选择在自己的服务器上自托管 (self-hosting)。
-强大的 PostgreSQL 核心：
+### 强大的 PostgreSQL 核心
+- 提供一个功能齐全的 PostgreSQL 数据库，支持完整的 SQL 功能，包括复杂的查询、事务、触发器、函数和丰富的扩展 (如 PostGIS, pg_cron, pgvector)。
+- 对于熟悉 SQL 的开发者来说，上手非常快。
 
-在这儿你会获得的一个功能齐全的 PostgreSQL 数据库，可以使用完整的 SQL 功能，包括复杂的查询、事务、触发器、函数和丰富的扩展 (如 PostGIS, pg_cron, pgvector)。
-对于熟悉 SQL 的开发者来说，上手非常快。
-易用性和开发者体验：
+### 易用性和开发者体验
+- 提供直观的图形用户界面 (Supabase Studio) 用于管理数据库、用户、存储等。
+- 自动生成 RESTful 和 GraphQL API，无需编写后端代码即可进行数据操作。
+- 提供多种语言的客户端库 (JavaScript, Python, Dart/Flutter, Swift, Kotlin 等)，方便前端和移动应用集成。
 
-提供直观的图形用户界面 (Supabase Studio) 用于管理数据库、用户、存储等。
-自动生成 RESTful 和 GraphQL API，无需编写后端代码即可进行数据操作。
-提供多种语言的客户端库 (JavaScript, Python, Dart/Flutter, Swift, Kotlin 等)，方便与前端和移动应用集成。
-一体化解决方案：
+### 一体化解决方案
+- **数据库 (Database)**: 核心功能。
+- **用户认证 (Authentication)**: 轻松实现用户注册、登录、第三方登录等。
+- **文件存储 (Storage)**: 存储和提供图片、视频等大文件。
+- **边缘函数 (Edge Functions)**: 编写和部署无服务器函数，处理自定义后端逻辑。
+- **实时 (Realtime)**: 订阅数据库变更，实现实时数据同步。
 
-数据库 (Database): 核心功能。
-用户认证 (Authentication): 轻松实现用户注册、登录、第三方登录等。
-文件存储 (Storage): 存储和提供图片、视频等大文件。
-边缘函数 (Edge Functions): 编写和部署无服务器函数，处理自定义后端逻辑。
-实时 (Realtime): 订阅数据库变更，实现实时数据同步。
-成本效益：
-
-提供慷慨的免费套餐，非常适合个人项目、学习和原型开发。
-付费套餐的价格也相对透明和合理。
-
+### 成本效益
+- 提供慷慨的免费套餐，非常适合个人项目、学习和原型开发。
+- 付费套餐价格透明合理。
 
 ## 核心功能组件
 
-数据库 (Database - PostgreSQL):
+### 数据库 (Database - PostgreSQL)
+- **表格编辑器**: 在 Supabase Studio 中可像操作电子表格一样创建和修改表结构和数据。
+- **SQL 编辑器**: 在浏览器中直接编写和执行 SQL 查询。
+- **行级安全策略 (Row Level Security - RLS)**: 定义基于用户身份和角色的精细数据访问规则，确保用户只能访问他们被授权的数据。强烈建议启用并配置 RLS。
+- **数据库函数和触发器**: 利用 PostgreSQL 的功能实现复杂的业务逻辑。
+- **数据库扩展**: 安装 pg_cron (定时任务)、pgvector (向量数据，用于 AI/ML) 等扩展增强功能。
 
-表格编辑器： 在 Supabase Studio 中可以像操作电子表格一样创建、修改表结构和数据。
-SQL 编辑器： 直接在浏览器中编写和执行 SQL 查询。
-行级安全策略 (Row Level Security - RLS): 这是 Supabase 安全模型的基石。你可以基于用户身份、角色等定义精细的数据访问规则，确保用户只能访问他们被授权的数据。强烈建议启用并配置 RLS。
-数据库函数和触发器： 利用 PostgreSQL 的强大功能，在数据库层面实现复杂的业务逻辑。
-数据库扩展： 安装如 pg_cron (定时任务)、pgvector (向量数据，用于 AI/ML) 等扩展增强功能。
-用户认证 (Authentication):
+### 用户认证 (Authentication)
+- **多种登录方式**: 邮箱密码、手机 OTP、魔法链接 (Magic Links)、匿名登录。
+- **社交登录 (OAuth)**: 支持 Google, GitHub, Apple, Facebook, Twitter, Azure, GitLab 等提供商。
+- **JWT (JSON Web Tokens)**: 使用行业标准的 JWT 进行会话管理。
+- **用户管理**: 在 Supabase Studio 中查看和管理用户。
+- **与 RLS 集成**: 认证信息 (如用户 ID) 可直接在 RLS 策略中使用。
 
-多种登录方式： 邮箱密码、手机 OTP、魔法链接 (Magic Links)、匿名登录。
-社交登录 (OAuth)： 支持 Google, GitHub, Apple, Facebook, Twitter, Azure, GitLab 等众多提供商。
-JWT (JSON Web Tokens)： 使用行业标准的 JWT 进行会话管理。
-用户管理： 在 Supabase Studio 中查看和管理用户。
-与 RLS 集成： 认证信息 (如用户 ID) 可以直接在 RLS 策略中使用。
-文件存储 (Storage):
+### 文件存储 (Storage)
+- **存储桶 (Buckets)**: 类似文件夹的结构，用于组织文件，支持公开或私有设置。
+- **权限控制**: 可为存储桶和单个对象设置访问权限，与用户认证系统和 RLS
+- **CDN 集成**: 通常会自动配置 CDN，加速全球文件访问。
 
-存储桶 (Buckets)： 类似于文件夹，用于组织文件。可以设置公开或私有。
-权限控制： 可以为存储桶和单个对象设置精细的访问权限，与用户认证系统和 RLS 集成。
-CDN 集成： 通常会自动配置 CDN，加速全球文件访问。
-边缘函数 (Edge Functions):
+### 边缘函数 (Edge Functions)
+- **无服务器架构**: 无需管理服务器，按需执行功能。
+- **使用 Deno**: 可以使用 TypeScript 或 JavaScript 编写函数逻辑。
+- **用途**: 处理 Webhooks、与第三方 API 交互、执行需要保密的后端逻辑、数据校验和转换等。
+- **全球部署**: 部署在靠近用户的边缘节点，减少延迟。
 
-Serverless 架构： 无需管理服务器，按需执行。
-使用 Deno (TypeScript/JavaScript)： 编写函数逻辑。
-用途： 处理 Webhooks、与第三方 API 交互、执行需要保密的后端逻辑、数据校验和转换等。
-全球部署： 部署在靠近用户的边缘节点，减少延迟。
-实时 (Realtime):
+### 实时 (Realtime)
+- **数据库变更订阅**: 当数据库中的数据发生插入、更新或删除时，客户端可以实时收到通知。
+- **用途**: 适用于聊天应用、实时协作、实时仪表盘、通知系统等。
+- **基于 PostgreSQL 的 LISTEN/NOTIFY 和 Supabase Realtime 服务器实现。
 
-订阅数据库变更： 当数据库中的数据发生插入、更新或删除时，客户端可以实时收到通知。
-用途： 聊天应用、实时协作、实时仪表盘、通知系统等。
-基于 PostgreSQL 的 LISTEN/NOTIFY 和 Supabase Realtime 服务器。
-自动生成的 API:
+### 自动生成的 API
+- **RESTful API**: Supabase 使用 PostgREST 自动为您的数据库表生成 RESTful API 端点。
+- **GraphQL API**: 通过 pg_graphql 扩展，可以自动生成 GraphQL API。
 
-RESTful API: Supabase 使用 PostgREST 自动为你的数据库表生成 RESTful API 端点。
-GraphQL API: 通过 pg_graphql 扩展，可以自动生成 GraphQL API。
-Supabase Studio (管理后台):
-
-一个用户友好的 Web 界面，用于管理上述所有功能：
-数据库表和数据
-SQL 编辑器
-用户认证配置和用户列表
-文件存储桶和文件
-边缘函数部署和日志
-API 文档和密钥管理
-项目设置、日志、使用量监控等
-
+### Supabase Studio (管理后台)
+- **用户友好的 Web 界面**: 用于管理下述所有功能：
+  - 数据库表和数据
+  - SQL 编辑器
+  - 用户认证配置及用户列表
+  - 文件存储桶和文件
+  - 边缘函数部署及日志
+  - API 文档及密钥管理
+  - 项目设置、日志、使用量监控等
 
 ## 开始使用
-<Callout>注：本篇教材内容均以自部署版本作演示</Callout>
+<Callout>注：本篇教程内容均以自部署版本作演示</Callout>
+<Callout 
+  title="版本过旧"
+  type="warn"
+>
+  警告：本篇简述内容不适用于最新版本的 Supabase，仅作为入门了解参考使用。教程配套依赖版本：
+  ```
+  next: "^14.2.3",
+  @supabase/ssr: "^0.1.0",
+  @supabase/supabase-js: "^2.39.7",
+  ```
+</Callout>
 
+### 步骤
 1. [创建 Next.js 项目](/docs/Next)
 2. 安装客户端库
-```package-install
-npm install @supabase/supabase-js @supabase/ssr
+   ```package-install
+   npm install @supabase/supabase-js @supabase/ssr
+   ```
+3. 创建本地 `.env` [环境配置文件]，写入 Supabase Key
+   ```bash
+   SUPABASE_URL="Supabase 链接url地址"
+   SUPABASE_ANON_KEY="Supabase 访问令牌"
+   SUPABASE_ROLE_KEY="Supabase 管理员令牌"
+   ```
+   <Callout>链接地址和访问令牌为必要参数</Callout>
+4. 初始化 Supabase Client
+<Files>
+  <Folder name="app">
+    <File name="layout.tsx" />
+    <File name="page.tsx" />
+    <File name="global.css" />
+  </Folder>
+  <Folder name="components">
+    <File name="button.tsx" />
+    <File name="tabs.tsx" />
+    <File name="dialog.tsx" />
+  </Folder>
+  <Folder name="config" defaultOpen>
+    <File name="client.ts" />
+    <File name="server.ts" />
+    <File name="middleware.ts" />
+  </Folder>
+  <File name="package.json" />
+</Files>
+
+创建 `config` 文件夹用于存放 server、client、middleware 客户端连接对象。
+
+```ts title="client.ts"
+import { createBrowserClient } from '@supabase/ssr'
+
+export const createClient = () =>
+  createBrowserClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!
+  )
 ```
+
+```ts title="server.ts"
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+
+export const createClient = (cookieStore: ReturnType<typeof cookies>) => {
+  return createServerClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value, ...options })
+          } catch (error) {
+            // `set` 方法从 Server Component 中调用，可以忽略，如果您有中间件刷新用户会话。
+          }
+        },
+        remove(name: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value: '', ...options })
+          } catch (error) {
+            // `delete` 方法从 Server Component 中调用，可以忽略，如果您有中间件刷新用户会话。
+          }
+        },
+      },
+    }
+  )
+}
+```
+
+```ts title="middleware.ts"
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { type NextRequest, NextResponse } from "next/server";
+
+export const createClient = (request: NextRequest) => {
+  let response = NextResponse.next({
+    request: { headers: request.headers },
+  });
+
+  const supabase = createServerClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          request.cookies.set({ name, value, ...options });
+          response = NextResponse.next({ request: { headers: request.headers } });
+          response.cookies.set({ name, value, ...options });
+        },
+        remove(name: string, options: CookieOptions) {
+          request.cookies.set({ name, value: "", ...options });
+          response = NextResponse.next({ request: { headers: request.headers } });
+          response.cookies.set({ name, value: "", ...options });
+        },
+      },
+    },
+  );
+
+  return { supabase, response };
+};
+```
+

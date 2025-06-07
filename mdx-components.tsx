@@ -4,6 +4,7 @@ import * as TabsComponents from 'fumadocs-ui/components/tabs';
 import type { MDXComponents } from 'mdx/types';
 import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 import * as icons from 'lucide-react';
+import { CodeBlock, Pre } from 'fumadocs-ui/components/codeblock';
 
 export function getMDXComponents(components?: MDXComponents): MDXComponents {
   return {
@@ -13,6 +14,11 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     ...FilesComponents,
     Accordion,
     Accordions,
+    pre: ({ ref: _ref, ...props }) => (
+      <CodeBlock {...props}>
+        <Pre>{props.children}</Pre>
+      </CodeBlock>
+    ),
     ...components,
   };
 }

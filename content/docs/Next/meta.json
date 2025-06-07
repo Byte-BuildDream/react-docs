@@ -9,19 +9,7 @@
     "project-structure",
     "layouts-and-pages",
     "---Supabase---",
-    "manual-installation",
-    "...",
-    "(integrations)",
-    "---Writing---",
-    "page-conventions",
-    "markdown",
-    "navigation",
-    "---UI---",
-    "customisation",
-    "theme",
-    "search",
-    "components",
-    "mdx",
-    "layouts"
+    "What-Is-Supabase",
+    "Supabase-CRUD"
   ]
 }
