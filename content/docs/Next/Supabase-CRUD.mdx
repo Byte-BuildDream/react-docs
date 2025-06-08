@@ -2,3 +2,841 @@
 title: 数据库操作 (CRUD)
 icon: Database
 ---
+
+在这个教程中，我们将使用 Supabase 来实现对 **user_profiles** 表的基本 CRUD（创建、读取、更新和删除）操作
+
+```sql
+create table public.user_profiles (
+  username character varying(50) not null,
+  avatar_url character varying(255) null,
+  bio text null,
+  date_of_birth date null,
+  gender integer null default 0,
+  address character varying(255) null,
+  city character varying(100) null,
+  state character varying(100) null,
+  country character varying(100) null,
+  friends_count integer null default 0,
+  groups_count integer null default 0,
+  is_active boolean null default true,
+  website character varying(255) null,
+  occupation character varying(100) null,
+  interests text[] null,
+  created_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  user_id uuid not null,
+  constraint user_profiles_pkey primary key (user_id),
+  constraint user_profiles_username_key unique (username)
+) TABLESPACE pg_default;
+```
+
+
+首先：创建一个 `User Profile` 类，封装所有关于用户资料的 CRUD 操作。这样可以将逻辑集中到一个文件中，便于管理与扩展。
+
+## 项目结构
+<Files>
+  <Folder name="app" defaultOpen>
+    <Folder name="user_profiles" >
+        <File name="page.tsx" defaultOpen/>
+    </Folder>
+  </Folder>
+  <Folder name="lib" defaultOpen>
+    <File name="userProfile.ts" />
+  </Folder>
+  <Folder name="types" defaultOpen>
+    <File name="userProfile.ts" />
+  </Folder>
+</Files>
+
+
+
+
+---
+
+## Step 1 - 类型定义
+
+在 `types/userProfile.ts` 文件定义 `User Profile` 类型：
+
+```ts title="userProfile.ts"
+export interface UserProfile {
+  user_id: number;
+  username: string;
+  avatar_url?: string;
+  bio?: string;
+  date_of_birth?: string;
+  gender?: number;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  friends_count?: number;
+  groups_count?: number;
+  is_active?: boolean;
+  website?: string;
+  occupation?: string;
+  interests?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+```
+
+---
+
+## Step 2 - 创建 UserProfile 工具集
+
+在 `/lib/userProfile.ts` 中，我们将创建 `User Profile` 对象，封装 CRUD 操作：
+
+```ts title="userProfile.ts"
+import { createClient } from '@/config/client';
+import { UserProfile } from '@/types/userProfile';
+import { v4 as uuidv4 } from 'uuid';
+/**
+ * UserProfileService - 处理用户资料相关操作的服务。
+ */
+export const UserProfileService = {
+  
+  /**
+   * 加载所有用户资料。
+   * @returns {Promise<UserProfile[]>} 返回一个 Promise，解析为用户资料对象的数组。
+   * @throws {Error} 如果获取用户资料时发生错误，则抛出错误。
+   */
+  async loadProfiles(): Promise<UserProfile[]> {
+    const supabase = createClient()
+    const { data, error } = await supabase.from('user_profiles').select('*');
+    if (error) {
+      throw new Error(`获取资料时发生错误: ${error.message}`);
+    }
+    return data || [];
+  },
+  /**
+   * 在数据库中创建一个新的用户资料。
+   * @param {Omit<UserProfile, 'user_id'>} userProfile - 要创建的用户资料数据。注意：不包含 user_id 字段。
+   * @returns {Promise<UserProfile>} 返回一个 Promise，解析为新创建的用户资料对象。
+   * @throws {Error} 如果创建用户资料时发生错误，则抛出错误。
+   */
+  async createProfile(userProfile: Omit<UserProfile, 'user_id'>): Promise<UserProfile> {
+    try {
+      const supabase = createClient();
+      
+      // 验证必填字段
+      if (!userProfile.username?.trim()) {
+        throw new Error('用户名不能为空');
+      }
+
+      // 检查用户名是否已存在
+      const existingProfile = await this.fetchProfileByUsername(userProfile.username);
+      if (existingProfile) {
+        throw new Error('该用户名已被使用');
+      }
+
+      // 生成 UUID 作为 user_id
+      const user_id = uuidv4();
+
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .insert([{ ...userProfile, user_id }])
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(`创建用户资料失败: ${error.message}`);
+      }
+
+      return data;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`创建用户资料时发生错误: ${error.message}`);
+      }
+      throw new Error('创建用户资料时发生未知错误');
+    }
+  },
+  /**
+   * 根据用户名更新现有的用户资料。
+   * @param {string} username - 要更新的用户资料的用户名。
+   * @param {Partial<Omit<UserProfile, 'user_id'>>} updates - 要更新的用户资料字段。
+   * @returns {Promise<UserProfile>} 返回一个 Promise，解析为更新后的用户资料对象。
+   * @throws {Error} 如果更新用户资料时发生错误，则抛出错误。
+   */
+  async updateProfile(
+    username: string, 
+    updates: Partial<Omit<UserProfile, 'user_id'>>
+  ): Promise<UserProfile> {
+    try {
+      const supabase = createClient();
+
+      // 验证输入参数
+      if (!username?.trim()) {
+        throw new Error('用户名不能为空');
+      }
+
+      if (Object.keys(updates).length === 0) {
+        throw new Error('没有提供要更新的字段');
+      }
+
+      // 检查用户是否存在
+      const existingProfile = await this.fetchProfileByUsername(username);
+      if (!existingProfile) {
+        throw new Error('要更新的用户资料不存在');
+      }
+
+      // 如果更新包含用户名，检查新用户名是否已被使用
+      if (updates.username && updates.username !== username) {
+        const usernameExists = await this.fetchProfileByUsername(updates.username);
+        if (usernameExists) {
+          throw new Error('新用户名已被使用');
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update(updates)
+        .eq('username', username)
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(`更新用户资料失败: ${error.message}`);
+      }
+
+      return data;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`更新用户资料时发生错误: ${error.message}`);
+      }
+      throw new Error('更新用户资料时发生未知错误');
+    }
+  },
+  /**
+   * 根据用户名删除用户资料。
+   * @param {string} username - 要删除的用户资料的用户名。
+   * @returns {Promise<void>} 返回一个 Promise，当资料删除完成时解析。
+   * @throws {Error} 如果删除用户资料时发生错误，则抛出错误。
+   */
+  async deleteProfile(username: string): Promise<void> {
+    const supabase = createClient()
+    const { error } = await supabase.from('user_profiles').delete().eq('username', username);
+    if (error) {
+      throw new Error(`删除资料时发生错误: ${error.message}`);
+    }
+  },
+  /**
+   * 根据用户名获取用户资料。
+   * @param {string} username - 要获取的用户资料的用户名。
+   * @returns {Promise<UserProfile | null>} 返回一个 Promise，解析为找到的用户资料对象或 null（如果未找到）。
+   * @throws {Error} 如果获取用户资料时发生错误，则抛出错误。
+   */
+  async fetchProfileByUsername(username: string): Promise<UserProfile | null> {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('username', username)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(`获取资料时发生错误: ${error.message}`);
+      }
+
+      return data;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`获取资料时发生错误: ${error.message}`);
+      }
+      throw new Error('获取资料时发生未知错误');
+    }
+  }
+};
+```
+
+### API 方法
+
+#### 1. 加载所有用户资料
+```typescript
+async loadProfiles(): Promise<UserProfile[]>
+```
+
+**描述**：获取所有用户资料的列表。
+
+**返回值**：
+- `Promise<UserProfile[]>` - 用户资料对象数组
+
+**错误处理**：
+- 如果获取失败，抛出错误信息
+
+**示例**：
+```typescript
+try {
+  const profiles = await UserProfileService.loadProfiles();
+  console.log(profiles);
+} catch (error) {
+  console.error('加载用户资料失败:', error);
+}
+```
+
+#### 2. 创建用户资料
+```typescript
+async createProfile(userProfile: Omit<UserProfile, 'user_id'>): Promise<UserProfile>
+```
+
+**描述**：创建新的用户资料。
+
+**参数**：
+- `userProfile`: 用户资料对象（不包含 user_id）
+  ```typescript
+  {
+    username: string;        // 必填，用户名
+    avatar_url?: string;     // 可选，头像URL
+    bio?: string;           // 可选，个人简介
+    date_of_birth?: string; // 可选，出生日期
+    gender?: number;        // 可选，性别（0:未指定, 1:男, 2:女, 3:其他）
+    address?: string;       // 可选，地址
+    city?: string;          // 可选，城市
+    state?: string;         // 可选，州/省
+    country?: string;       // 可选，国家
+    website?: string;       // 可选，个人网站
+    occupation?: string;    // 可选，职业
+    interests?: string[];   // 可选，兴趣爱好数组
+  }
+  ```
+
+**返回值**：
+- `Promise<UserProfile>` - 创建成功的用户资料对象
+
+**错误处理**：
+- 如果用户名为空，抛出错误
+- 如果用户名已存在，抛出错误
+- 如果创建失败，抛出错误信息
+
+**示例**：
+```typescript
+try {
+  const newProfile = await UserProfileService.createProfile({
+    username: "john_doe",
+    bio: "Hello World",
+    occupation: "Developer"
+  });
+  console.log('创建成功:', newProfile);
+} catch (error) {
+  console.error('创建失败:', error);
+}
+```
+
+#### 3. 更新用户资料
+```typescript
+async updateProfile(username: string, updates: Partial<Omit<UserProfile, 'user_id'>>): Promise<UserProfile>
+```
+
+**描述**：更新指定用户的资料。
+
+**参数**：
+- `username`: string - 要更新的用户名
+- `updates`: 要更新的字段对象（与 createProfile 参数结构相同）
+
+**返回值**：
+- `Promise<UserProfile>` - 更新后的用户资料对象
+
+**错误处理**：
+- 如果用户名为空，抛出错误
+- 如果用户不存在，抛出错误
+- 如果更新包含用户名且新用户名已存在，抛出错误
+- 如果更新失败，抛出错误信息
+
+**示例**：
+```typescript
+try {
+  const updatedProfile = await UserProfileService.updateProfile("john_doe", {
+    bio: "Updated bio",
+    occupation: "Senior Developer"
+  });
+  console.log('更新成功:', updatedProfile);
+} catch (error) {
+  console.error('更新失败:', error);
+}
+```
+
+#### 4. 删除用户资料
+```typescript
+async deleteProfile(username: string): Promise<void>
+```
+
+**描述**：删除指定用户的资料。
+
+**参数**：
+- `username`: string - 要删除的用户名
+
+**返回值**：
+- `Promise<void>`
+
+**错误处理**：
+- 如果删除失败，抛出错误信息
+
+**示例**：
+```typescript
+try {
+  await UserProfileService.deleteProfile("john_doe");
+  console.log('删除成功');
+} catch (error) {
+  console.error('删除失败:', error);
+}
+```
+
+#### 5. 获取单个用户资料
+```typescript
+async fetchProfileByUsername(username: string): Promise<UserProfile | null>
+```
+
+**描述**：根据用户名获取单个用户的资料。
+
+**参数**：
+- `username`: string - 要查询的用户名
+
+**返回值**：
+- `Promise<UserProfile | null>` - 用户资料对象或 null（如果未找到）
+
+**错误处理**：
+- 如果查询失败，抛出错误信息
+
+**示例**：
+```typescript
+try {
+  const profile = await UserProfileService.fetchProfileByUsername("john_doe");
+  if (profile) {
+    console.log('找到用户:', profile);
+  } else {
+    console.log('用户不存在');
+  }
+} catch (error) {
+  console.error('查询失败:', error);
+}
+```
+
+---
+
+## Step 3 - 使用 UserProfile 工具集
+
+在 `page.tsx` 或其他组件中，直接使用 `User ProfileService` 来执行 CRUD 操作。例如：
+
+
+```tsx title="page.tsx"
+'use client'
+import React, { useEffect, useState } from 'react';
+import { UserProfileService } from '@/lib/userProfile';
+import { UserProfile } from '@/types/userProfile';
+
+export default function UserProfilesPage() {
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'create' | 'search' | 'list'>('list');
+  
+  // 表单状态
+  const [formData, setFormData] = useState({
+    username: '',
+    bio: '',
+    avatar_url: '',
+    date_of_birth: '',
+    gender: 0,
+    address: '',
+    city: '',
+    state: '',
+    country: '',
+    website: '',
+    occupation: '',
+    interests: [] as string[],
+  });
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
+
+  // 加载所有用户资料
+  const loadProfiles = async () => {
+    try {
+      setIsLoading(true);
+      const profiles = await UserProfileService.loadProfiles();
+      setProfiles(profiles);
+    } catch (error) {
+      console.error(error);
+      alert('加载用户资料失败: ' + error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProfiles();
+  }, []);
+
+  // 创建用户资料
+  const createProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await UserProfileService.createProfile(formData);
+      alert('用户资料创建成功');
+      setFormData({
+        username: '',
+        bio: '',
+        avatar_url: '',
+        date_of_birth: '',
+        gender: 0,
+        address: '',
+        city: '',
+        state: '',
+        country: '',
+        website: '',
+        occupation: '',
+        interests: [],
+      });
+      loadProfiles();
+      setActiveTab('list');
+    } catch (error) {
+      console.error(error);
+      alert('创建失败: ' + error);
+    }
+  };
+
+  // 更新用户资料
+  const updateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProfile) return;
+    try {
+      await UserProfileService.updateProfile(selectedProfile.username, formData);
+      alert('用户资料更新成功');
+      loadProfiles();
+      setSelectedProfile(null);
+    } catch (error) {
+      console.error(error);
+      alert('更新失败: ' + error);
+    }
+  };
+
+  // 删除用户资料
+  const deleteProfile = async (username: string) => {
+    if (!window.confirm(`确定要删除用户 ${username} 的资料吗？`)) return;
+    try {
+      await UserProfileService.deleteProfile(username);
+      alert('用户资料删除成功');
+      loadProfiles();
+    } catch (error) {
+      console.error(error);
+      alert('删除失败: ' + error);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-black text-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent">
+            用户资料管理
+          </h1>
+          <div className="flex space-x-4">
+            <button
+              onClick={() => setActiveTab('create')}
+              className={`px-4 py-2 rounded-md ${
+                activeTab === 'create'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              创建用户
+            </button>
+            <button
+              onClick={() => setActiveTab('search')}
+              className={`px-4 py-2 rounded-md ${
+                activeTab === 'search'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              搜索用户
+            </button>
+            <button
+              onClick={() => setActiveTab('list')}
+              className={`px-4 py-2 rounded-md ${
+                activeTab === 'list'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              用户列表
+            </button>
+          </div>
+        </div>
+
+        {activeTab === 'create' && (
+          <div className="bg-gray-900 rounded-lg p-6 shadow-xl">
+            <h2 className="text-xl font-semibold mb-6 text-purple-400">创建新用户</h2>
+            <form onSubmit={createProfile} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">用户名</label>
+                  <input
+                    type="text"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">头像URL</label>
+                  <input
+                    type="url"
+                    value={formData.avatar_url}
+                    onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">出生日期</label>
+                  <input
+                    type="date"
+                    value={formData.date_of_birth}
+                    onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">性别</label>
+                  <select
+                    value={formData.gender}
+                    onChange={(e) => setFormData({ ...formData, gender: Number(e.target.value) })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  >
+                    <option value={0}>未指定</option>
+                    <option value={1}>男</option>
+                    <option value={2}>女</option>
+                    <option value={3}>其他</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">职业</label>
+                  <input
+                    type="text"
+                    value={formData.occupation}
+                    onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">个人网站</label>
+                  <input
+                    type="url"
+                    value={formData.website}
+                    onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">个人简介</label>
+                <textarea
+                  value={formData.bio}
+                  onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">地址</label>
+                  <input
+                    type="text"
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">城市</label>
+                  <input
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">国家</label>
+                  <input
+                    type="text"
+                    value={formData.country}
+                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">兴趣爱好</label>
+                <input
+                  type="text"
+                  placeholder="用逗号分隔多个兴趣"
+                  value={formData.interests.join(', ')}
+                  onChange={(e) => setFormData({ ...formData, interests: e.target.value.split(',').map(i => i.trim()) })}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-purple-600 text-white py-3 px-4 rounded-md hover:bg-purple-700 transition-colors"
+              >
+                创建用户
+              </button>
+            </form>
+          </div>
+        )}
+
+        {activeTab === 'search' && (
+          <div className="bg-gray-900 rounded-lg p-6 shadow-xl">
+            <h2 className="text-xl font-semibold mb-6 text-purple-400">搜索用户</h2>
+            <div className="flex gap-4 mb-6">
+              <input
+                type="text"
+                placeholder="输入用户名搜索..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+              <button
+                onClick={() => {
+                  const profile = profiles.find(p => p.username.toLowerCase().includes(searchQuery.toLowerCase()));
+                  setSelectedProfile(profile || null);
+                }}
+                className="bg-purple-600 text-white px-6 py-2 rounded-md hover:bg-purple-700 transition-colors"
+              >
+                搜索
+              </button>
+            </div>
+
+            {selectedProfile && (
+              <div className="bg-gray-800 rounded-lg p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-xl font-semibold text-purple-400">{selectedProfile.username}</h3>
+                    <p className="text-gray-400">{selectedProfile.occupation}</p>
+                  </div>
+                  <button
+                    onClick={() => deleteProfile(selectedProfile.username)}
+                    className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
+                  >
+                    删除
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-400">个人简介</p>
+                    <p className="text-white">{selectedProfile.bio}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">所在地</p>
+                    <p className="text-white">
+                      {[selectedProfile.city, selectedProfile.state, selectedProfile.country]
+                        .filter(Boolean)
+                        .join(', ')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'list' && (
+          <div className="bg-gray-900 rounded-lg p-6 shadow-xl">
+            <h2 className="text-xl font-semibold mb-6 text-purple-400">用户列表</h2>
+            {isLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
+              </div>
+            ) : profiles.length === 0 ? (
+              <p className="text-gray-400 text-center py-8">暂无用户资料</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {profiles.map((profile) => (
+                  <div
+                    key={profile.user_id}
+                    className="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition-colors"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-purple-400">{profile.username}</h3>
+                        {profile.occupation && (
+                          <p className="text-gray-400 text-sm">{profile.occupation}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => deleteProfile(profile.username)}
+                        className="text-red-400 hover:text-red-300"
+                      >
+                        删除
+                      </button>
+                    </div>
+                    
+                    {profile.bio && (
+                      <p className="text-gray-300 text-sm mb-4">{profile.bio}</p>
+                    )}
+                    
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {profile.city && (
+                        <div>
+                          <span className="text-gray-400">城市：</span>
+                          <span className="text-white">{profile.city}</span>
+                        </div>
+                      )}
+                      {profile.country && (
+                        <div>
+                          <span className="text-gray-400">国家：</span>
+                          <span className="text-white">{profile.country}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {profile.interests && profile.interests.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-gray-400 text-sm mb-2">兴趣爱好：</p>
+                        <div className="flex flex-wrap gap-2">
+                          {profile.interests.map((interest, index) => (
+                            <span
+                              key={index}
+                              className="px-2 py-1 bg-purple-900 text-purple-300 rounded-full text-xs"
+                            >
+                              {interest}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+```
+
+## 注意事项
+1. 所有方法都是异步的，需要使用 `async/await` 或 Promise 链式调用
+2. 用户名是唯一的，不能重复
+3. `user_id` 字段由系统自动生成，不需要手动指定
+4. 所有可选字段都可以为 null
+5. 时间戳字段（created_at, updated_at）由数据库自动管理 
+
+---
+
+## 总结
+
+通过将用户资料的 CRUD 操作封装到 `UserProfileService` 中，我们实现了一个整洁、模块化、易于维护的结构：
+
+- **模块化开发**：所有与用户资料相关的逻辑都集中在一个文件中，便于管理和扩展。
+- **稳健性**：结构化的错误处理机制确保用户在操作过程中的良好体验。
+- **易于扩展**：可以很方便地在 `UserProfileService` 中添加新的方法来支持新的需求，无需修改组件代码。
+

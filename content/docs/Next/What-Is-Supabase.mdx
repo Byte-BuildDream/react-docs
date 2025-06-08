@@ -125,9 +125,9 @@ icon: CircleHelp
    ```
 3. 创建本地 `.env` [环境配置文件]，写入 Supabase Key
    ```bash
-   SUPABASE_URL="Supabase 链接url地址"
-   SUPABASE_ANON_KEY="Supabase 访问令牌"
-   SUPABASE_ROLE_KEY="Supabase 管理员令牌"
+   NEXT_PUBLIC_SUPABASE_URL="Supabase 链接url地址"
+   NEXT_PUBLIC_SUPABASE_ANON_KEY="Supabase 访问令牌"
+   NEXT_PUBLIC_SUPABASE_ROLE_KEY="Supabase 管理员令牌"
    ```
    <Callout>链接地址和访问令牌为必要参数</Callout>
 4. 初始化 Supabase Client
@@ -144,89 +144,21 @@ icon: CircleHelp
   </Folder>
   <Folder name="config" defaultOpen>
     <File name="client.ts" />
-    <File name="server.ts" />
-    <File name="middleware.ts" />
   </Folder>
   <File name="package.json" />
 </Files>
 
-创建 `config` 文件夹用于存放 server、client、middleware 客户端连接对象。
+创建 `config` 文件夹用于存放 client 客户端连接对象。
 
 ```ts title="client.ts"
 import { createBrowserClient } from '@supabase/ssr'
 
 export const createClient = () =>
   createBrowserClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 ```
 
-```ts title="server.ts"
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 
-export const createClient = (cookieStore: ReturnType<typeof cookies>) => {
-  return createServerClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value, ...options })
-          } catch (error) {
-            // `set` 方法从 Server Component 中调用，可以忽略，如果您有中间件刷新用户会话。
-          }
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: '', ...options })
-          } catch (error) {
-            // `delete` 方法从 Server Component 中调用，可以忽略，如果您有中间件刷新用户会话。
-          }
-        },
-      },
-    }
-  )
-}
-```
-
-```ts title="middleware.ts"
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { type NextRequest, NextResponse } from "next/server";
-
-export const createClient = (request: NextRequest) => {
-  let response = NextResponse.next({
-    request: { headers: request.headers },
-  });
-
-  const supabase = createServerClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({ name, value, ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
-          response.cookies.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: "", ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
-          response.cookies.set({ name, value: "", ...options });
-        },
-      },
-    },
-  );
-
-  return { supabase, response };
-};
-```
 

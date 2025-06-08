@@ -10,6 +10,8 @@
     "layouts-and-pages",
     "---Supabase---",
     "What-Is-Supabase",
-    "Supabase-CRUD"
+    "Supabase-CRUD",
+    "---TailwindCSS---",
+    "TailWindCSS-Config"
   ]
 }
