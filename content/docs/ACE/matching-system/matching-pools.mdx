@@ -1,0 +1,508 @@
+---
+title: 匹配池系统技术文档
+description: 系统中的匹配池管理组件
+icon: Target
+---
+
+# 匹配池系统技术文档
+
+## 概述
+
+本文档详细介绍了 Elo 匹配系统中的匹配池管理组件，包括 `DefaultPool`（5v5常规匹配）、`DoublePool`（2v2匹配）和 `EloPool`（5v5 ELO ban图匹配）三个核心匹配池。这些组件负责处理不同模式的队伍匹配、队列管理和比赛确认等功能。
+
+## 架构设计
+
+### 组件关系图
+
+<Mermaid
+  chart="
+graph TD
+    A[队伍] --> B[匹配池系统]
+    B --> C[DefaultPool]
+    B --> D[DoublePool]
+    B --> E[EloPool]
+    
+    C --> F[WaitingQueueManager]
+    C --> G[MatchedQueue]
+    C --> H[MatchAcceptManager]
+    
+    D --> I[WaitingQueueManager]
+    D --> J[MatchedQueue]
+    D --> K[MatchAcceptManager]
+    
+    E --> L[WaitingQueueManager]
+    E --> M[MatchedQueue]
+    E --> N[MatchAcceptManager]
+    
+    F --> O[等待队列]
+    G --> P[已匹配队列]
+    H --> Q[比赛确认管理]
+    
+    I --> R[等待队列]
+    J --> S[已匹配队列]
+    K --> T[比赛确认管理]
+    
+    L --> U[等待队列]
+    M --> V[已匹配队列]
+    N --> W[比赛确认管理]"
+/>
+
+## 匹配池类型
+
+### 1. DefaultPool - 5v5 常规匹配池
+
+#### 类定义
+
+```csharp
+public class DefaultPool
+{
+    private readonly IHubContext<TeamHubService> _hubContext;
+    public MatchedQueue matchedQueue { get; private set; }
+    public WaitingQueueManager WaitingQueueManager { get; private set; }
+    public MatchAcceptManager matchAcceptManager { get; private set; }
+    private readonly PlayerControllers _playerControllers;
+    private const int DEFAULT_TEAM_SIZE = 5;
+    public const int SKILL_LEVEL_DIFFERENCE = 1000;
+}
+```
+
+#### 核心功能
+
+##### 队伍加入匹配
+**方法**: `DefaultPoolJoinAsync(Team team)`
+
+- **功能**: 处理5v5常规匹配模式
+- **流程**:
+  1. 检查队伍人数是否为5人
+  2. 如果不足5人，进行队伍平衡
+  3. 创建或获取 MTG（匹配组）
+  4. 寻找对手进行匹配
+  5. 创建比赛并广播确认
+
+##### 从队列移除队伍
+**方法**: `RemoveTeamFromQueues(Team team)`
+
+- **功能**: 从所有队列中移除队伍
+- **流程**:
+  1. 从等待队列移除
+  2. 从匹配队列移除
+  3. 广播队列状态更新
+
+##### 队员准备状态
+**方法**: `TeamMembersMatchReady(string MatchID, string UID)`
+
+- **功能**: 处理队员比赛准备状态
+- **流程**:
+  1. 查找对应比赛
+  2. 更新队员准备状态
+  3. 广播状态更新
+
+### 2. DoublePool - 2v2 匹配池
+
+#### 类定义
+
+```csharp
+public class DoublePool
+{
+    private readonly ILogger<DoublePool> _logger;
+    private readonly IHubContext<TeamHubService> _hubContext;
+    public MatchedQueue matchedQueue { get; private set; }
+    public WaitingQueueManager WaitingQueueManager { get; private set; }
+    public MatchAcceptManager matchAcceptManager { get; private set; }
+    private readonly PlayerControllers _playerControllers;
+    public const int DOUBLE_TEAM_SIZE = 2;
+    public const int SKILL_LEVEL_DIFFERENCE = 1000;
+}
+```
+
+#### 核心功能
+
+##### 队伍加入匹配
+**方法**: `DoublePoolJoinAsync(Team team)`
+
+- **功能**: 处理2v2匹配模式
+- **流程**:
+  1. 发送匹配队友消息
+  2. 进行队伍平衡
+  3. 寻找对手进行匹配
+  4. 创建比赛并广播确认
+
+##### 从队列移除队伍
+**方法**: `RemoveTeamFromQueues(Team team)`
+
+- **功能**: 从所有队列中移除队伍
+- **流程**:
+  1. 从等待队列移除
+  2. 从匹配队列移除
+  3. 广播队列状态更新
+
+##### 队员准备状态
+**方法**: `TeamMembersMatchReady(string matchId, string playerId)`
+
+- **功能**: 处理队员比赛准备状态
+- **流程**:
+  1. 查找对应比赛
+  2. 更新队员准备状态
+  3. 广播状态更新
+
+### 3. EloPool - 5v5 ELO ban图匹配池
+
+#### 类定义
+
+```csharp
+public class EloPool
+{
+    private readonly ILogger<DefaultPool> _logger;
+    private readonly IHubContext<TeamHubService> _hubContext;
+    public MatchedQueue matchedQueue { get; set; }
+    public WaitingQueueManager WaitingQueueManager { get; set; }
+    public MatchAcceptManager matchAcceptManager { get; set; }
+    private readonly PlayerControllers _playerControllers;
+}
+```
+
+#### 核心功能
+
+##### 队伍加入匹配
+**方法**: `DefaultPoolJoinAsync(Team team)`
+
+- **功能**: 处理5v5 ELO ban图匹配模式
+- **流程**:
+  1. 尝试直接匹配
+  2. 如果失败，进行队伍平衡
+  3. 再次尝试匹配
+  4. 处理匹配结果
+
+##### 从队列移除队伍
+**方法**: `RemoveTeamFromQueues(Team team)`
+
+- **功能**: 从所有队列中移除队伍
+
+##### 队员准备状态
+**方法**: `TeamMembersMatchReady(string MatchID, string UID)`
+
+- **功能**: 处理队员比赛准备状态
+
+##### 地图禁用
+**方法**: `TeamMembersMatchBanMap(string MatchID, string UID, string[] MapName)`
+
+- **功能**: 处理队员地图禁用选择
+
+## 核心组件
+
+### 1. WaitingQueueManager - 等待队列管理器
+
+#### 功能概述
+
+负责管理等待匹配的队伍，处理队伍平衡和队列维护。
+
+#### 核心方法
+
+##### 队伍平衡
+**方法**: `BalancingTeam(Team team)`
+
+- **功能**: 为不完整队伍寻找队友
+- **流程**:
+  1. 检查队伍人数
+  2. 在等待队列中寻找合适的队伍
+  3. 创建 MTG（匹配组）
+  4. 返回平衡后的 MTG
+
+##### 从等待队列移除
+**方法**: `RemoveFromWaitingQueue(Team team)`
+
+- **功能**: 从等待队列中移除指定队伍
+- **流程**:
+  1. 查找包含该队伍的 MTG
+  2. 从 MTG 中移除队伍
+  3. 如果 MTG 为空，从队列中移除
+  4. 广播队列状态更新
+
+### 2. MatchedQueue - 已匹配队列管理器
+
+#### 功能概述
+
+负责管理已匹配的队伍，寻找对手并创建比赛。
+
+#### 核心方法
+
+##### 匹配对手
+**方法**: `MatchopponentsAsync(MTG T)`
+
+- **功能**: 为 MTG 寻找对手
+- **流程**:
+  1. 在已匹配队列中寻找合适的对手
+  2. 检查技能等级差异
+  3. 检查重复玩家
+  4. 创建比赛
+  5. 从队列中移除已匹配的队伍
+
+##### 添加到队列
+**方法**: `AddToQueue(MTG t)`
+
+- **功能**: 将 MTG 添加到已匹配队列
+- **流程**:
+  1. 检查是否已存在
+  2. 添加到队列
+  3. 广播队列状态更新
+
+##### 从队列移除
+**方法**: `RemoveFromQueue(Team team)`
+
+- **功能**: 从已匹配队列中移除指定队伍
+- **流程**:
+  1. 查找包含该队伍的 MTG
+  2. 从 MTG 中移除队伍
+  3. 如果 MTG 为空，从队列中移除
+  4. 广播队列状态更新
+
+### 3. MatchAcceptManager - 比赛确认管理器
+
+#### 功能概述
+
+负责管理比赛确认流程，包括准备状态、地图禁用和比赛开始。
+
+#### 核心方法
+
+##### 广播确认准备
+**方法**: `BroadcastAcceptReady(Match match)`
+
+- **功能**: 广播比赛确认准备
+- **流程**:
+  1. 初始化比赛确认状态
+  2. 添加到比赛队列
+  3. 设置定时器检查确认状态
+  4. 广播确认界面
+
+##### 比赛确认失败
+**方法**: `MatchAcceptFail(Match match, bool isRemove = true)`
+
+- **功能**: 处理比赛确认失败
+- **流程**:
+  1. 重置所有队员状态
+  2. 从通讯组移除
+  3. 更新队伍匹配状态
+  4. 广播失败消息
+
+##### 处理未准备玩家
+**方法**: `HandleUnreadyPlayers(Match match)`
+
+- **功能**: 处理未准备的玩家
+- **流程**:
+  1. 检查所有队员准备状态
+  2. 处理未准备的玩家
+  3. 更新比赛状态
+
+##### 处理比赛开始
+**方法**: `HandleMatchStart(Match match)`
+
+- **功能**: 处理比赛开始
+- **流程**:
+  1. 清理比赛状态
+  2. 广播比赛开始
+  3. 更新队伍状态
+
+## 数据模型
+
+### 静态队列
+
+```csharp
+// 等待队列
+public static List<MTG> WaitingQueue
+
+// 已匹配队列
+public static List<MTG> ReadyMatchQueue
+
+// 比赛队列
+public static List<Match> MatchQueue
+```
+
+### 匹配组（MTG）
+
+```csharp
+public class MTG
+{
+    public List<Team> teams { get; set; }
+    public int TotalPlayers { get; set; }
+    public DateTime CreatedTime { get; set; }
+}
+```
+
+### 比赛（Match）
+
+```csharp
+public class Match
+{
+    public string MatchID { get; set; }
+    public List<MTG> ParticipatingTeams { get; set; }
+    public DateTime MatchCreateTime { get; set; }
+    public string Mode { get; set; }
+    public string Map { get; set; }
+}
+```
+
+## 匹配算法
+
+### 1. 技能等级匹配
+
+- **技能差异阈值**: 1000 ELO 分数
+- **匹配策略**: 寻找技能等级相近的队伍
+- **平衡机制**: 优先匹配技能等级差异最小的队伍
+
+### 2. 队伍平衡
+
+- **DefaultPool**: 5人队伍，不足时寻找队友
+- **DoublePool**: 2人队伍，不足时寻找队友
+- **EloPool**: 5人队伍，支持直接匹配和队伍平衡
+
+### 3. 重复玩家检查
+
+- **检查范围**: 所有参与队伍
+- **检查策略**: 确保同一玩家不会出现在多个队伍中
+- **处理方式**: 跳过包含重复玩家的匹配
+
+## 错误处理
+
+### 异常处理策略
+
+1. **参数验证**: 所有公共方法都包含参数验证
+2. **异常捕获**: 使用 try-catch 块捕获异常
+3. **日志记录**: 详细的错误日志记录
+4. **优雅降级**: 异常情况下确保系统继续运行
+5. **资源清理**: 异常时确保队列状态正确
+
+### 常见错误场景
+
+1. **队伍不存在**: 处理队伍已解散的情况
+2. **匹配超时**: 处理长时间未匹配的情况
+3. **确认超时**: 处理队员未及时确认的情况
+4. **队列状态不一致**: 处理队列状态异常的情况
+
+## 性能优化
+
+### 线程安全
+
+- 使用 `lock` 语句保护共享队列的修改操作
+- 避免在锁内执行耗时操作
+- 使用线程安全的数据结构
+
+### 内存管理
+
+- 及时清理过期的匹配组
+- 限制队列大小
+- 定期清理无效数据
+
+### 异步操作
+
+- 所有 I/O 操作都使用异步方法
+- 使用 `Task.WhenAll` 并行执行多个异步操作
+- 避免在异步方法中使用同步阻塞操作
+
+### 匹配优化
+
+- 使用高效的查找算法
+- 实现匹配优先级
+- 优化队列遍历性能
+
+## 部署和配置
+
+### 依赖注入
+
+```csharp
+// 在 Startup.cs 中注册服务
+services.AddScoped<DefaultPool>();
+services.AddScoped<DoublePool>();
+services.AddScoped<EloPool>();
+```
+
+### 配置参数
+
+```json
+{
+  "MatchingSystem": {
+    "DefaultPool": {
+      "TeamSize": 5,
+      "SkillLevelDifference": 1000,
+      "MatchTimeout": 300
+    },
+    "DoublePool": {
+      "TeamSize": 2,
+      "SkillLevelDifference": 1000,
+      "MatchTimeout": 180
+    },
+    "EloPool": {
+      "TeamSize": 5,
+      "SkillLevelDifference": 1000,
+      "MatchTimeout": 300
+    }
+  }
+}
+```
+
+## 监控和维护
+
+### 关键指标
+
+1. **等待队列大小**: 监控各匹配池的等待队列
+2. **已匹配队列大小**: 监控各匹配池的已匹配队列
+3. **匹配成功率**: 监控匹配的成功率
+4. **匹配延迟**: 监控匹配的响应时间
+5. **确认成功率**: 监控比赛确认的成功率
+
+### 健康检查
+
+建议实现以下健康检查：
+
+1. **队列状态检查**
+2. **匹配算法性能监控**
+3. **内存使用情况监控**
+4. **异常率监控**
+5. **响应时间监控**
+
+### 性能监控
+
+1. **匹配延迟**: 监控从加入队列到匹配成功的时间
+2. **队列处理延迟**: 监控队列操作的响应时间
+3. **确认处理延迟**: 监控比赛确认的处理时间
+
+## 扩展性考虑
+
+### 水平扩展
+
+- 使用 Redis 或类似技术实现跨实例的队列共享
+- 实现分布式匹配算法
+- 考虑使用消息队列进行异步处理
+
+### 功能扩展
+
+- 支持更多的匹配模式
+- 实现更复杂的匹配算法
+- 添加匹配优先级系统
+- 支持自定义匹配规则
+
+### 算法优化
+
+- 实现更智能的技能匹配算法
+- 添加机器学习匹配优化
+- 支持动态匹配参数调整
+
+## 最佳实践
+
+### 开发建议
+
+1. **错误处理**: 始终包含适当的错误处理和日志记录
+2. **资源管理**: 确保正确释放资源，特别是队列资源
+3. **并发安全**: 使用适当的锁机制保护共享资源
+4. **性能考虑**: 避免在关键路径上执行耗时操作
+5. **测试覆盖**: 为关键功能编写单元测试和集成测试
+
+### 运维建议
+
+1. **监控告警**: 设置适当的监控和告警机制
+2. **日志分析**: 定期分析日志以发现潜在问题
+3. **性能调优**: 根据实际使用情况调整匹配参数
+4. **备份策略**: 实现关键数据的备份和恢复策略
+
+## 总结
+
+匹配池系统是 Elo 匹配系统的核心组件，提供了完整的队伍匹配、队列管理和比赛确认功能。通过合理的架构设计、高效的匹配算法和完善的错误处理，确保了系统的稳定性、可扩展性和可维护性，为用户提供了优质的匹配体验。 

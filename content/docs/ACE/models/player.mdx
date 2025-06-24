@@ -1,0 +1,501 @@
+---
+title: Player 模型技术文档
+description: 玩家核心模型和相关信息模型
+icon: User
+---
+
+# Player 模型技术文档
+
+## 概述
+
+Player 模型是 Elo 匹配系统的核心实体之一，定义了玩家的所有属性和行为。该模型采用组合模式设计，将玩家的不同方面信息分离到不同的子模型中，实现了高内聚、低耦合的设计目标。
+
+## 核心类结构
+
+### Player 主类
+
+```csharp
+public class Player
+{
+    public string UID { get; set; } // Player ID
+    public string ConnectID { get; set; }
+    public string Path { get; set; }
+    public bool ActionAntiCheat { get; set; } // Player Whether Runing AntiCheat  
+    public bool ReadyStatus { get; set; } = false; // Player Ready Status ,Defalut Value: false
+    public bool TeamServiceStatus { get; set; } = true; // 玩家队伍服务是否正常
+    public PlayerInfo PInfo { get; set; } // Player Info Object
+    public PlayerBanData? PBanData { get; set; }
+    public PlayerGameInfo? PGInfo { get; set; } // Player Info
+    public PlayerHistorMatchData? PHMD { get; set; } // Player Histor Match Data
+    public MatchAcceptData matchAcceptData { get; set; } = new MatchAcceptData();
+
+    public void PlayerInitialization()
+    {
+        // 玩家初始化逻辑
+    }
+}
+```
+
+### 核心属性说明
+
+| 属性 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| UID | string | 玩家唯一标识符 | - |
+| ConnectID | string | 连接ID，用于WebSocket连接 | - |
+| Path | string | 玩家路径信息 | - |
+| ActionAntiCheat | bool | 反作弊状态 | false |
+| ReadyStatus | bool | 准备状态 | false |
+| TeamServiceStatus | bool | 队伍服务状态 | true |
+| PInfo | PlayerInfo | 玩家基本信息 | - |
+| PBanData | PlayerBanData? | 禁赛信息 | null |
+| PGInfo | PlayerGameInfo? | 游戏统计信息 | null |
+| PHMD | PlayerHistorMatchData? | 历史比赛数据 | null |
+| matchAcceptData | MatchAcceptData | 比赛接受数据 | new() |
+
+## 子模型详解
+
+### PlayerInfo - 玩家基本信息
+
+```csharp
+public class PlayerInfo
+{
+    public string Username { get; set; }
+    public string FullName { get; set; }
+    public string AvatarUrl { get; set; }
+    public string Website { get; set; }
+    public bool Online { get; set; }
+    public int Power { get; set; }
+    public string Description { get; set; }
+    public string Phrase { get; set; }
+    public string FriendCode { get; set; }
+    public string SteamId { get; set; }
+}
+```
+
+**属性说明**:
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| Username | string | 用户名 |
+| FullName | string | 全名 |
+| AvatarUrl | string | 头像URL |
+| Website | string | 个人网站 |
+| Online | bool | 在线状态 |
+| Power | int | 权限等级 |
+| Description | string | 个人描述 |
+| Phrase | string | 个人签名 |
+| FriendCode | string | 好友码 |
+| SteamId | string | Steam ID |
+
+### PlayerGameInfo - 游戏统计信息
+
+```csharp
+public class PlayerGameInfo
+{
+    public int EloScore { get; set; }
+    public int PlayTime { get; set; } // 游戏时长
+    public int ReputationScore { get; set; }//信誉分
+    public double KD { get; set; } // KD 比
+    public int Kills { get; set; } // 击杀
+    public int Deaths { get; set; } // 死亡
+    public int Assists { get; set; } // 助攻
+    public int Headshots { get; set; } // 暴击
+}
+```
+
+**属性说明**:
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| EloScore | int | Elo评分，用于匹配算法 |
+| PlayTime | int | 游戏时长（分钟） |
+| ReputationScore | int | 信誉分数 |
+| KD | double | 击杀死亡比 |
+| Kills | int | 总击杀数 |
+| Deaths | int | 总死亡数 |
+| Assists | int | 总助攻数 |
+| Headshots | int | 爆头击杀数 |
+
+### PlayerHistorMatchData - 历史比赛数据
+
+```csharp
+public class PlayerHistorMatchData
+{
+    public int SkillLevel { get; set; }// 匹配系统中的排名
+    public int WinCount { get; set; }// 胜利次数
+    public int LossCount { get; set; }// 失败次数
+}
+```
+
+**属性说明**:
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| SkillLevel | int | 技能等级，用于匹配排名 |
+| WinCount | int | 胜利场次 |
+| LossCount | int | 失败场次 |
+
+### PlayerDevice - 设备信息
+
+```csharp
+public class PlayerDevice
+{
+    public string? HWID { get; set; } // 用户设备HWID
+    public string? DeviceType { get; set; } // 设备类型
+    public string? DeviceOS { get; set; } // 设备操作系统
+    public string? DeviceModel { get; set; } // 设备型号
+    public string? DeviceIPAddress { get; set; } // 设备IP地址
+    public int? Ping { get; set; } // 设备网络延迟
+    public string? CPUInfo { get; set; } // CPU信息
+    public string? GPUInfo { get; set; } // GPU信息
+    public string? RAMInfo { get; set; } // 内存信息
+    public string? StorageInfo { get; set; } // 存储信息
+}
+```
+
+**属性说明**:
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| HWID | string? | 硬件唯一标识符 |
+| DeviceType | string? | 设备类型（PC/移动设备等） |
+| DeviceOS | string? | 操作系统信息 |
+| DeviceModel | string? | 设备型号 |
+| DeviceIPAddress | string? | 设备IP地址 |
+| Ping | int? | 网络延迟（毫秒） |
+| CPUInfo | string? | CPU详细信息 |
+| GPUInfo | string? | GPU详细信息 |
+| RAMInfo | string? | 内存信息 |
+| StorageInfo | string? | 存储设备信息 |
+
+### PlayerBanData - 禁赛信息
+
+```csharp
+public class PlayerBanData
+{
+    public bool IsBanned { get; set; } // 是否被禁赛
+    public DateTime BanStartTime { get; set; } // 禁赛开始时间
+    public DateTime BanEndTime { get; set; } // 禁赛结束时间
+    public string? BanReason { get; set; } // 禁赛原因
+}
+```
+
+**属性说明**:
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| IsBanned | bool | 当前是否被禁赛 |
+| BanStartTime | DateTime | 禁赛开始时间 |
+| BanEndTime | DateTime | 禁赛结束时间 |
+| BanReason | string? | 禁赛原因描述 |
+
+### MatchAcceptData - 比赛接受数据
+
+```csharp
+public class MatchAcceptData
+{
+    public bool Match_ReadyStatus { get; set; } = false; // Player Match Ready Status ,Defalut Value: false
+    public string[]? Match_BanMap { get; set; } = { };
+}
+```
+
+**属性说明**:
+
+| 属性 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| Match_ReadyStatus | bool | 比赛准备状态 | false |
+| Match_BanMap | string[]? | 禁选地图列表 | {} |
+
+## 核心方法
+
+### PlayerInitialization()
+
+**功能**: 玩家初始化方法
+
+**实现**:
+```csharp
+public void PlayerInitialization()
+{
+    // 初始化玩家基本信息
+    // 设置默认状态
+    // 加载历史数据
+}
+```
+
+**使用场景**:
+- 新玩家注册时
+- 玩家重新连接时
+- 系统重启后恢复玩家状态
+
+## 状态管理
+
+### 1. 在线状态管理
+
+```csharp
+// 设置玩家在线状态
+player.PInfo.Online = true;
+
+// 更新数据库中的在线状态
+await profiles.ModifyUserOnlineStatus(player.UID, true);
+```
+
+### 2. 准备状态管理
+
+```csharp
+// 设置玩家准备状态
+player.ReadyStatus = true;
+
+// 检查队伍是否全部准备
+bool allReady = team.AreAllMembersReady();
+```
+
+### 3. 禁赛状态管理
+
+```csharp
+// 检查玩家是否被禁赛
+if (player.PBanData?.IsBanned == true)
+{
+    // 处理禁赛逻辑
+    return;
+}
+```
+
+## 数据同步
+
+### 1. 与数据库同步
+
+```csharp
+// 从数据库加载玩家信息
+var profile = await profiles.GetProfileById(player.UID);
+if (profile != null)
+{
+    player.PInfo.Username = profile.UserName;
+    player.PInfo.FullName = profile.Full_name;
+    // ... 其他属性同步
+}
+```
+
+### 2. 实时状态同步
+
+```csharp
+// 通过SignalR同步状态到客户端
+await _hubContext.Clients.All.SendAsync("PlayerStatusChanged", player.UID, player.ReadyStatus);
+```
+
+## 性能优化
+
+### 1. 延迟加载
+
+```csharp
+// 只在需要时加载详细数据
+if (player.PGInfo == null)
+{
+    player.PGInfo = await LoadPlayerGameInfo(player.UID);
+}
+```
+
+### 2. 缓存策略
+
+```csharp
+// 缓存玩家基本信息
+private static readonly ConcurrentDictionary<string, PlayerInfo> _playerInfoCache = new();
+
+public static async Task<PlayerInfo> GetPlayerInfo(string uid)
+{
+    if (_playerInfoCache.TryGetValue(uid, out var cachedInfo))
+    {
+        return cachedInfo;
+    }
+    
+    var info = await LoadPlayerInfoFromDatabase(uid);
+    _playerInfoCache.TryAdd(uid, info);
+    return info;
+}
+```
+
+### 3. 批量操作
+
+```csharp
+// 批量更新玩家状态
+public static async Task BatchUpdatePlayerStatus(List<Player> players)
+{
+    var updates = players.Select(p => new { p.UID, p.ReadyStatus, p.TeamServiceStatus });
+    await BatchUpdateDatabase(updates);
+}
+```
+
+## 错误处理
+
+### 1. 数据验证
+
+```csharp
+public static bool ValidatePlayer(Player player)
+{
+    if (string.IsNullOrEmpty(player.UID))
+        return false;
+    
+    if (player.PInfo == null)
+        return false;
+    
+    if (player.PGInfo?.EloScore < 0)
+        return false;
+    
+    return true;
+}
+```
+
+### 2. 异常处理
+
+```csharp
+public static async Task<Player> LoadPlayerSafely(string uid)
+{
+    try
+    {
+        var player = await LoadPlayerFromDatabase(uid);
+        if (player == null)
+        {
+            throw new PlayerNotFoundException($"Player {uid} not found");
+        }
+        return player;
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, $"Failed to load player {uid}");
+        return null;
+    }
+}
+```
+
+## 扩展性设计
+
+### 1. 插件化扩展
+
+```csharp
+public interface IPlayerExtension
+{
+    void OnPlayerCreated(Player player);
+    void OnPlayerUpdated(Player player);
+    void OnPlayerDeleted(string uid);
+}
+
+// 注册扩展
+public static class PlayerExtensions
+{
+    private static readonly List<IPlayerExtension> _extensions = new();
+    
+    public static void RegisterExtension(IPlayerExtension extension)
+    {
+        _extensions.Add(extension);
+    }
+}
+```
+
+### 2. 配置化属性
+
+```csharp
+public class PlayerConfig
+{
+    public int MaxReputationScore { get; set; } = 1000;
+    public int MinEloScore { get; set; } = 0;
+    public int MaxEloScore { get; set; } = 5000;
+    public TimeSpan BanCheckInterval { get; set; } = TimeSpan.FromMinutes(5);
+}
+```
+
+## 监控和维护
+
+### 1. 性能监控
+
+```csharp
+public static class PlayerMetrics
+{
+    public static readonly Counter PlayerConnections = Metrics.CreateCounter("player_connections_total", "Total player connections");
+    public static readonly Gauge ActivePlayers = Metrics.CreateGauge("active_players", "Number of active players");
+    public static readonly Histogram PlayerLoadTime = Metrics.CreateHistogram("player_load_time_seconds", "Player load time");
+}
+```
+
+### 2. 健康检查
+
+```csharp
+public static async Task<bool> CheckPlayerHealth(Player player)
+{
+    // 检查连接状态
+    if (string.IsNullOrEmpty(player.ConnectID))
+        return false;
+    
+    // 检查数据完整性
+    if (!ValidatePlayer(player))
+        return false;
+    
+    // 检查禁赛状态
+    if (player.PBanData?.IsBanned == true && DateTime.Now < player.PBanData.BanEndTime)
+        return false;
+    
+    return true;
+}
+```
+
+## 最佳实践
+
+### 1. 创建玩家实例
+
+```csharp
+public static async Task<Player> CreatePlayer(string uid, string connectId)
+{
+    var player = new Player
+    {
+        UID = uid,
+        ConnectID = connectId,
+        ReadyStatus = false,
+        TeamServiceStatus = true,
+        PInfo = new PlayerInfo(),
+        PGInfo = new PlayerGameInfo(),
+        matchAcceptData = new MatchAcceptData()
+    };
+    
+    // 初始化玩家数据
+    await player.PlayerInitialization();
+    
+    return player;
+}
+```
+
+### 2. 更新玩家状态
+
+```csharp
+public static async Task UpdatePlayerStatus(Player player, bool readyStatus)
+{
+    player.ReadyStatus = readyStatus;
+    player.LastActivityTime = DateTime.UtcNow;
+    
+    // 同步到数据库
+    await SyncPlayerStatusToDatabase(player);
+    
+    // 通知相关服务
+    await NotifyPlayerStatusChange(player);
+}
+```
+
+### 3. 清理玩家数据
+
+```csharp
+public static async Task CleanupPlayer(Player player)
+{
+    // 清理缓存
+    _playerInfoCache.TryRemove(player.UID, out _);
+    
+    // 更新在线状态
+    await profiles.ModifyUserOnlineStatus(player.UID, false);
+    
+    // 清理连接信息
+    player.ConnectID = null;
+    player.ReadyStatus = false;
+}
+```
+
+## 总结
+
+Player 模型通过组合模式实现了玩家信息的模块化管理，每个子模型负责特定的功能领域，使得整个模型既保持了内聚性，又具备了良好的扩展性。
+
+通过完善的状态管理、数据同步、错误处理和性能优化机制，确保了玩家数据的一致性和系统的稳定性。同时，监控维护和最佳实践为系统的长期运行提供了有力保障。 

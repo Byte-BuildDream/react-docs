@@ -1,0 +1,574 @@
+---
+title: 休闲中心服务技术文档
+description: 系统中的自定义房间管理服务组件
+icon: Home
+---
+
+# 休闲中心服务技术文档
+
+## 概述
+
+本文档详细介绍了 Elo 匹配系统中的休闲中心服务组件 `LeisureCenterService`。该组件负责处理自定义房间的创建、管理、聊天、服务器创建和游戏初始化等功能，为用户提供完整的休闲游戏体验。
+
+## 架构设计
+
+### 组件关系图
+
+<Mermaid
+  chart="
+graph TD
+    A[客户端] --> B[LeisureCenterService]
+    B --> C[CustomRoom]
+    B --> D[LeisureCenterTool]
+    B --> E[PlayerControllers]
+    B --> F[数据库服务]
+    
+    B --> G[SignalR Hub]
+    G --> H[实时通信]
+    
+    C --> I[房间池管理]
+    C --> J[邀请池管理]
+    C --> K[聊天系统]
+    C --> L[服务器管理]
+    
+    L --> M[服务器创建]
+    L --> N[游戏初始化]
+    L --> O[游戏同步]"
+/>
+
+## LeisureCenterService
+
+### 类定义
+
+`LeisureCenterService` 继承自 SignalR 的 `Hub` 类，是自定义房间管理的核心组件。
+
+```csharp
+public class LeisureCenterService : Hub
+{
+    private static IHubContext<LeisureCenterService> _hubContext;
+    public static List<CustomRoom> CustomRoomPool = new List<CustomRoom>();
+    public static List<CustomRoom> CustomRoomInvitePool = new List<CustomRoom>();
+    public static List<IMessage> MessageList = new List<IMessage>();
+}
+```
+
+### 核心功能
+
+#### 1. 房间列表管理
+
+**方法**: `GetCustomRoomList(int page, int pageSize)`
+
+- **功能**: 获取自定义房间列表（带分页）
+- **参数**: 
+  - `page`: 起始页面数（从1开始）
+  - `pageSize`: 每页数据条数
+- **流程**:
+  1. 验证分页参数
+  2. 计算跳过的房间数量
+  3. 使用 Skip 和 Take 实现分页
+  4. 发送分页后的房间列表
+  5. 发送总房间数量
+  6. 发送邀请房间列表
+  7. 将连接加入 CustomRoomHall 组
+
+#### 2. 创建自定义房间
+
+**方法**: `CreateCustomRoom(string UID)`
+
+- **功能**: 创建新的自定义房间
+- **参数**: 
+  - `UID`: 房主UID
+- **流程**:
+  1. 查找玩家对象
+  2. 执行基础检查（Steam绑定等）
+  3. 检查玩家是否已在其他房间
+  4. 生成唯一房间ID
+  5. 创建 CustomRoom 对象
+  6. 初始化房间
+  7. 添加到房间池
+  8. 设置通讯组
+  9. 发送欢迎消息和系统消息
+  10. 广播房间信息
+
+#### 3. 加入自定义房间
+
+**方法**: `JoinCustomRoom(string UID, string RoomID, string Password = null)`
+
+- **功能**: 寻找并加入指定的房间
+- **参数**:
+  - `UID`: 即将加入房间的玩家
+  - `RoomID`: 需要加入的房间ID
+  - `Password`: 房间密码（可选）
+- **流程**:
+  1. 查找玩家对象
+  2. 执行基础检查
+  3. 检查玩家是否已在其他房间
+  4. 查找目标房间
+  5. 验证房间存在性和人数限制
+  6. 密码校验（如果房间有密码）
+  7. 添加玩家到房间成员
+  8. 更新房间人数
+  9. 设置通讯组
+  10. 发送系统消息
+  11. 广播房间信息
+
+#### 4. 房间服务恢复
+
+**方法**: `RoomRecoverySerivce(string UID)`
+
+- **功能**: 恢复玩家的房间服务状态
+- **参数**:
+  - `UID`: 玩家UID
+- **流程**:
+  1. 查找玩家对象
+  2. 检查玩家是否在任意房间中
+  3. 查找玩家所属房间
+  4. 更新连接ID
+  5. 重新加入通讯组
+  6. 广播房间信息
+
+#### 5. 离开房间
+
+**方法**: `ExitRoom()`
+
+- **功能**: 处理玩家离开房间
+- **流程**:
+  1. 检查是否为房主
+  2. 如果是房主：
+     - 检查服务器创建状态
+     - 解散房间
+     - 清理通讯组
+     - 处理邀请池
+     - 销毁服务器
+  3. 如果是成员：
+     - 从房间成员中移除
+     - 更新房间人数
+     - 发送系统消息
+     - 广播房间信息
+
+#### 6. 房间管理
+
+##### 转移房主权限
+**方法**: `TransferLeader(string RoomID, string newOwnerUID)`
+
+- **功能**: 房主权限向某一玩家转移
+- **参数**:
+  - `RoomID`: 房间ID
+  - `newOwnerUID`: 新房主玩家UID
+- **流程**:
+  1. 验证调用者为房主
+  2. 查找新房主玩家
+  3. 交换房主和成员身份
+  4. 发送通知消息
+  5. 广播房间信息
+
+##### 移除玩家
+**方法**: `KickPlayer(string RoomID, string banUID)`
+
+- **功能**: 房主移除某一玩家
+- **参数**:
+  - `RoomID`: 房间ID
+  - `banUID`: 被移除的玩家UID
+- **流程**:
+  1. 验证调用者为房主
+  2. 查找要移除的玩家
+  3. 从房间成员中移除
+  4. 更新房间人数
+  5. 发送踢出事件
+  6. 清理通讯组
+  7. 发送系统消息
+  8. 广播房间信息
+
+#### 7. 聊天系统
+
+##### 大厅聊天
+**方法**: `GetHallChatList()`
+
+- **功能**: 获取大厅聊天列表
+- **返回**: 向客户端发送 `HallMessageList` 事件
+
+**方法**: `HallChat(string UID, string message)`
+
+- **功能**: 处理大厅聊天消息
+- **流程**:
+  1. 查找发送者身份
+  2. 创建消息对象
+  3. 添加到消息列表
+  4. 广播到 CustomRoomHall 组
+
+##### 房间聊天
+**方法**: `GetRoomChatList(string RoomID)`
+
+- **功能**: 获取房间聊天列表
+- **参数**:
+  - `RoomID`: 房间ID
+
+**方法**: `RoomChat(string RoomID, string message)`
+
+- **功能**: 处理房间内聊天消息
+- **参数**:
+  - `RoomID`: 房间ID
+  - `message`: 聊天消息
+- **流程**:
+  1. 查找房间
+  2. 添加玩家消息
+  3. 广播到房间成员
+
+#### 8. 房间信息更新
+
+##### 更新游戏信息
+**方法**: `UpdateCustomRoomGameInfo(CustomRoomGameInfo gameInfo)`
+
+- **功能**: 更新房间的游戏信息
+- **参数**:
+  - `gameInfo`: 新的游戏信息
+- **流程**:
+  1. 验证调用者为房主
+  2. 检查信息是否发生变化
+  3. 更新游戏信息
+  4. 广播更新后的信息
+  5. 广播房间信息
+
+##### 更新基础信息
+**方法**: `UpdateCustomRoomBaseInfo(CustomRoomBaseInfo baseInfo)`
+
+- **功能**: 更新房间的基础信息
+- **参数**:
+  - `baseInfo`: 更新的基础信息
+- **流程**:
+  1. 验证调用者为房主
+  2. 检查信息是否发生变化
+  3. 更新基础信息
+  4. 处理邀请池更新
+  5. 广播更新后的信息
+  6. 广播房间信息
+
+#### 9. 服务器管理
+
+##### 创建房间服务器
+**方法**: `RoomCreateServer(string RoomID, int CORE, float RAM, string RegionId)`
+
+- **功能**: 为房间创建游戏服务器
+- **参数**:
+  - `RoomID`: 房间ID
+  - `CORE`: CPU核心数
+  - `RAM`: 内存大小
+  - `RegionId`: 区域ID
+- **流程**:
+  1. 验证调用者为房主
+  2. 检查服务器状态
+  3. 设置创建状态
+  4. 发送创建开始通知
+  5. 调用服务器创建方法
+  6. 处理创建结果
+  7. 更新服务器状态
+  8. 发送创建结束通知
+
+##### 游戏初始化
+**方法**: `GameInitialization(string RoomID)`
+
+- **功能**: 初始化房间游戏
+- **参数**:
+  - `RoomID`: 房间ID
+- **流程**:
+  1. 验证调用者为房主
+  2. 检查服务器状态
+  3. 同步游戏类型、模式、地图
+
+##### 开始或加入游戏
+**方法**: `StartOrJoinGame(string RoomID)`
+
+- **功能**: 开始或加入房间游戏
+- **参数**:
+  - `RoomID`: 房间ID
+- **流程**:
+  1. 验证调用者为房主
+  2. 检查服务器是否存在
+  3. 更新游戏状态
+  4. 同步游戏服务
+  5. 广播房间信息
+
+### 辅助方法
+
+#### 1. 系统消息创建
+
+**方法**: `CreateSysteamMessage(string Type, string Message)`
+
+- **功能**: 创建系统消息
+- **参数**:
+  - `Type`: 消息类型
+  - `Message`: 消息内容
+- **返回**: SystemMessage 对象
+
+#### 2. 玩家检查
+
+**方法**: `Cheak_Player_Join_OtherRoom(Player player)`
+
+- **功能**: 检查玩家是否已加入其他房间
+- **参数**:
+  - `player`: 玩家对象
+- **返回**: 布尔值，表示是否已在其他房间
+
+#### 3. 错误消息发送
+
+**方法**: `SendErrorMessage(Player player, string message)`
+
+- **功能**: 向玩家发送错误消息
+- **参数**:
+  - `player`: 玩家对象
+  - `message`: 错误消息
+
+#### 4. 房间ID生成
+
+**方法**: `GenerateTeamID()`
+
+- **功能**: 生成6位字符+数字的房间ID
+- **格式**: 6位随机字符串（大写字母+数字）
+
+#### 5. 房间初始化
+
+**方法**: `InitializeCustomRoom(Player ownerPlayer)`
+
+- **功能**: 初始化自定义房间
+- **参数**:
+  - `ownerPlayer`: 房主玩家
+- **返回**: CustomRoom 对象
+
+#### 6. 玩家房间检查
+
+**方法**: `IsPlayerInAnyRoom(Player player)`
+
+- **功能**: 检查玩家是否在任意房间中
+- **参数**:
+  - `player`: 玩家对象
+- **返回**: 布尔值
+
+#### 7. 房间信息广播
+
+**方法**: `BroadcastRoomInfoAsync(CustomRoom newCustomRoom)`
+
+- **功能**: 广播房间信息
+- **参数**:
+  - `newCustomRoom`: 自定义房间对象
+- **流程**:
+  1. 向房间内广播房间信息
+  2. 向大厅广播房间列表
+
+## LeisureCenterTool
+
+### 静态工具类
+
+`LeisureCenterTool` 是一个静态工具类，提供休闲中心服务的辅助功能。
+
+```csharp
+public static class LeisureCenterTool
+{
+    // 通过 UID 寻找玩家对象
+    public async static Task<Player> FindPlayerByUID(string UID)
+    
+    // 创建基础的检查
+    public static string SimpleCheak(Player player)
+}
+```
+
+### 核心功能
+
+#### 1. 玩家查找
+
+**方法**: `FindPlayerByUID(string UID)`
+
+- **功能**: 通过 UID 寻找玩家对象
+- **参数**:
+  - `UID`: 玩家唯一标识符
+- **流程**:
+  1. 从玩家池中查找
+  2. 如果未找到，生成新玩家对象
+- **返回**: Player 对象
+
+#### 2. 基础检查
+
+**方法**: `SimpleCheak(Player player)`
+
+- **功能**: 创建基础的检查
+- **参数**:
+  - `player`: 玩家对象
+- **检查项**:
+  - Steam账户绑定状态
+- **返回**: 检查结果字符串
+
+## 数据模型
+
+### 静态数据池
+
+```csharp
+// 自定义房间池
+public static List<CustomRoom> CustomRoomPool
+
+// 邀请房间池
+public static List<CustomRoom> CustomRoomInvitePool
+
+// 聊天信息列表
+public static List<IMessage> MessageList
+```
+
+### 房间状态
+
+- **等待中**: 房间创建但未开始游戏
+- **游戏中**: 房间已开始游戏
+- **服务器创建中**: 正在创建游戏服务器
+
+### 服务器状态
+
+- **OFFLINE**: 离线状态
+- **ONLINE**: 在线状态
+- **CREATING**: 创建中状态
+
+## 错误处理
+
+### 异常处理策略
+
+1. **参数验证**: 所有公共方法都包含参数验证
+2. **异常捕获**: 使用 try-catch 块捕获异常
+3. **日志记录**: 详细的错误日志记录
+4. **优雅降级**: 异常情况下确保系统继续运行
+5. **资源清理**: 异常时确保资源正确清理
+
+### 常见错误场景
+
+1. **空参数**: 处理空或无效的参数
+2. **房间不存在**: 处理房间不存在的情况
+3. **权限不足**: 处理非房主操作的情况
+4. **服务器创建失败**: 处理服务器创建异常
+5. **玩家已在房间**: 处理重复加入房间的情况
+
+## 性能优化
+
+### 线程安全
+
+- 使用 `lock` 语句保护共享集合的修改操作
+- 避免在锁内执行耗时操作
+- 使用分页减少数据传输量
+
+### 内存管理
+
+- 及时清理不活跃的房间
+- 限制聊天消息数量
+- 合理管理邀请池
+
+### 异步操作
+
+- 所有 I/O 操作都使用异步方法
+- 服务器创建使用异步处理
+- 避免在异步方法中使用同步阻塞操作
+
+### 分页优化
+
+- 实现房间列表分页
+- 减少单次数据传输量
+- 提高页面加载速度
+
+## 部署和配置
+
+### 依赖注入
+
+```csharp
+// 在 Startup.cs 中注册服务
+services.AddSignalR();
+services.AddScoped<LeisureCenterService>();
+```
+
+### 日志配置
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Elo_Mathing.Service.LeisureCenterService": "Information"
+    }
+  }
+}
+```
+
+### 服务器配置
+
+```csharp
+// 服务器创建参数配置
+public class ServerConfig
+{
+    public int MinCores { get; set; } = 1;
+    public int MaxCores { get; set; } = 8;
+    public float MinRAM { get; set; } = 1.0f;
+    public float MaxRAM { get; set; } = 32.0f;
+    public string[] AvailableRegions { get; set; } = { "us-east-1", "eu-west-1", "ap-southeast-1" };
+}
+```
+
+## 监控和维护
+
+### 关键指标
+
+1. **活跃房间数量**: 监控 CustomRoomPool 的大小
+2. **邀请房间数量**: 监控 CustomRoomInvitePool 的大小
+3. **房间创建成功率**: 监控房间创建的成功率
+4. **服务器创建成功率**: 监控服务器创建的成功率
+5. **聊天消息处理延迟**: 监控聊天消息的处理时间
+
+### 健康检查
+
+建议实现以下健康检查：
+
+1. **房间池状态检查**
+2. **服务器状态监控**
+3. **内存使用情况监控**
+4. **异常率监控**
+5. **响应时间监控**
+
+### 性能监控
+
+1. **房间操作延迟**: 监控房间创建、加入、退出等操作的响应时间
+2. **聊天消息处理延迟**: 监控聊天消息的处理时间
+3. **服务器创建延迟**: 监控服务器创建的响应时间
+
+## 扩展性考虑
+
+### 水平扩展
+
+- 使用 Redis 或类似技术实现跨实例的状态共享
+- 实现连接粘性（Sticky Sessions）
+- 考虑使用 SignalR 的 Redis 背板
+
+### 功能扩展
+
+- 支持更多的房间类型
+- 实现房间排行榜系统
+- 添加房间统计和分析功能
+- 支持房间自定义设置
+- 实现房间邀请码系统
+
+### 安全增强
+
+- 添加房间操作权限验证
+- 实现房间行为监控
+- 添加反作弊检测
+- 实现房间举报系统
+
+## 最佳实践
+
+### 开发建议
+
+1. **错误处理**: 始终包含适当的错误处理和日志记录
+2. **资源管理**: 确保正确释放资源，特别是服务器资源
+3. **并发安全**: 使用适当的锁机制保护共享资源
+4. **性能考虑**: 避免在关键路径上执行耗时操作
+5. **测试覆盖**: 为关键功能编写单元测试和集成测试
+
+### 运维建议
+
+1. **监控告警**: 设置适当的监控和告警机制
+2. **日志分析**: 定期分析日志以发现潜在问题
+3. **性能调优**: 根据实际使用情况调整分页大小
+4. **备份策略**: 实现关键数据的备份和恢复策略
+
+## 总结
+
+`LeisureCenterService` 是 Elo 匹配系统中休闲中心的核心组件，提供了完整的自定义房间管理、实时通信、服务器创建和游戏初始化功能。通过合理的架构设计、分页优化和错误处理，确保了系统的稳定性、可扩展性和可维护性，为用户提供了优质的休闲游戏体验。 

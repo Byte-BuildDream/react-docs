@@ -1,0 +1,908 @@
+---
+title: AliYunCloundECS 模型技术文档
+description: 阿里云ECS管理模型和云服务集成
+icon: Cloud
+---
+
+# AliYunCloundECS 模型技术文档
+
+## 概述
+
+AliYunCloundECS 模型是 Elo 匹配系统中阿里云ECS服务管理的核心组件，负责管理云服务器的完整生命周期，包括实例创建、配置、监控、删除等操作。该模型集成了阿里云SDK，提供了完整的云服务管理功能。
+
+## 核心类结构
+
+### AliYunCloundECS 主类
+
+```csharp
+public class AliYunCloundECS
+{
+    private readonly ILogger<AliYunCloundECS> logger;
+    
+    public AliYunCloundECS(ILogger<AliYunCloundECS> logger)
+    {
+        this.logger = logger;
+    }
+    
+    public static List<Region> Region { get; set; } = new List<Region>
+    {
+        new Region { LocalName = "华北1（青岛）", RegionEndpoint = "ecs.cn-qingdao.aliyuncs.com", RegionId = "cn-qingdao", Status = "available" , Endpoint = "ecs.cn-qingdao.aliyuncs.com" },
+        new Region { LocalName = "华北2（北京）", RegionEndpoint = "ecs.cn-beijing.aliyuncs.com", RegionId = "cn-beijing", Status = "available" , Endpoint = "ecs.cn-beijing.aliyuncs.com" },
+        // ... 更多区域配置
+    };
+}
+```
+
+### Region - 区域配置模型
+
+```csharp
+public class Region
+{
+    public string LocalName { get; set; }
+    public string RegionEndpoint { get; set; }
+    public string RegionId { get; set; }
+    public string Status { get; set; }
+    public string Endpoint { get; set; }
+}
+```
+
+**属性说明**:
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| LocalName | string | 区域本地名称 |
+| RegionEndpoint | string | 区域API端点 |
+| RegionId | string | 区域ID |
+| Status | string | 区域状态 |
+| Endpoint | string | 服务端点 |
+
+## 核心方法
+
+### ApplyMatchServer() - 申请比赛服务器
+
+```csharp
+public static Server ApplyMatchServer(string MatchID)
+{
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.WriteLine($"[阿里云服务器] 开始申请服务器流程，匹配ID: {MatchID}");
+    
+    Region? region = Region.FirstOrDefault(R => R.LocalName == "华中1（武汉-本地地域）");
+    if (region == null)
+    {
+        Console.WriteLine("[阿里云服务器] 错误：无法找到目标区域");
+        return null;
+    }
+
+    string instanceType = "ecs.e-c1m2.xlarge";
+    string zoneId = "cn-wuhan-lr-a";
+
+    Console.WriteLine($"[阿里云服务器] 使用预设配置:");
+    Console.WriteLine($"[阿里云服务器] - 区域: {region.LocalName}");
+    Console.WriteLine($"[阿里云服务器] - 实例类型: {instanceType}");
+    Console.WriteLine($"[阿里云服务器] - 可用区: {zoneId}");
+
+    var client = CreateClient(region.Endpoint);
+    var imageTable = aliyun_image.GetRegionImageID(region.RegionId).Result;
+    if (imageTable == null)
+    {
+        Console.WriteLine("[阿里云服务器] 错误：无法获取镜像信息");
+        return null;
+    }
+
+    // 创建实例
+    var createServer = CreateInstance(client, region, zoneId, imageTable.Image_id, instanceType, $"ACE-MATCH-{MatchID}");
+    if (createServer == null)
+    {
+        Console.WriteLine("[阿里云服务器] 错误：创建实例失败");
+        return null;
+    }
+
+    string instanceId = createServer.Body.InstanceId;
+    Console.WriteLine($"[阿里云服务器] 实例创建成功: {instanceId}");
+
+    // 等待实例进入Stopped状态
+    const int maxInitWaitTime = 10;
+    bool isReady = false;
+    for (int i = 0; i < maxInitWaitTime; i++)
+    {
+        var instances = DescribeInstances(client, region, instanceId);
+        if (instances != null && instances.Any())
+        {
+            var instance = instances.First();
+            Console.WriteLine($"[阿里云服务器] 等待实例就绪，当前状态: {instance.Status}");
+            if (instance.Status == "Stopped")
+            {
+                isReady = true;
+                break;
+            }
+        }
+        Thread.Sleep(1000);
+    }
+
+    if (!isReady)
+    {
+        Console.WriteLine("[阿里云服务器] 错误：实例初始化超时");
+        DeleteInstance(client, region.RegionId, instanceId);
+        return null;
+    }
+
+    // 分配公网IP
+    string publicIPAddress = "";
+    const int maxRetries = 3;
+    for (int i = 0; i < maxRetries; i++)
+    {
+        try
+        {
+            publicIPAddress = AllocatePublicIpAddress(client, instanceId);
+            if (!string.IsNullOrEmpty(publicIPAddress))
+            {
+                Console.WriteLine($"[阿里云服务器] 成功分配公网IP: {publicIPAddress}");
+                break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[阿里云服务器] 第{i + 1}次分配IP失败: {ex.Message}");
+            Thread.Sleep(1000);
+        }
+    }
+
+    if (string.IsNullOrEmpty(publicIPAddress))
+    {
+        Console.WriteLine("[阿里云服务器] 错误：设置公网IP失败");
+        DeleteInstance(client, region.RegionId, instanceId);
+        return null;
+    }
+
+    // 启动实例
+    Console.WriteLine("[阿里云服务器] 开始启动实例...");
+    try
+    {
+        StartInstance(client, instanceId);
+        Thread.Sleep(2000); // 给实例一些启动的时间
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[阿里云服务器] 启动实例失败: {ex.Message}");
+        DeleteInstance(client, region.RegionId, instanceId);
+        return null;
+    }
+
+    // 等待实例完全启动
+    const int maxWaitTime = 15;
+    bool isRunning = false;
+    for (int i = 0; i < maxWaitTime; i++)
+    {
+        var instances = DescribeInstances(client, region, instanceId);
+        if (instances != null && instances.Any())
+        {
+            var instance = instances.First();
+            Console.WriteLine($"[阿里云服务器] 实例状态: {instance.Status}");
+            if (instance.Status == "Running")
+            {
+                isRunning = true;
+                break;
+            }
+        }
+        Thread.Sleep(1000);
+    }
+
+    if (!isRunning)
+    {
+        Console.WriteLine("[阿里云服务器] 错误：实例启动超时");
+        DeleteInstance(client, region.RegionId, instanceId);
+        return null;
+    }
+
+    Server server = new Server
+    {
+        ServerID = instanceId,
+        ServerName = $"ACE-MATCH-{MatchID}",
+        IP_Address = publicIPAddress,
+        Port = "27015",
+        ServerLocation = region.RegionId,
+        Status = "Running",
+        ISP = "ALiYun"
+    };
+
+    Console.WriteLine($"[阿里云服务器] 服务器创建完成: {server.IP_Address}");
+    Console.ForegroundColor = ConsoleColor.White;
+    return server;
+}
+```
+
+**服务器申请流程**:
+1. 选择目标区域和配置
+2. 创建ECS实例
+3. 等待实例初始化
+4. 分配公网IP地址
+5. 启动实例
+6. 等待实例完全启动
+7. 返回服务器信息
+
+### GenerationImageServer() - 生成镜像服务器
+
+```csharp
+public static Server GenerationImageServer(string ImageID)
+{
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.WriteLine($"[生成镜像服务器] 开始申请服务器流程，镜像ID: {ImageID}");
+
+    Region? region = Region.FirstOrDefault(R => R.LocalName == "华中1（武汉-本地地域）");
+    if (region == null)
+    {
+        Console.WriteLine("[生成镜像服务器] 错误：无法找到目标区域");
+        return null;
+    }
+
+    string instanceType = "ecs.e-c1m2.xlarge";
+    string zoneId = "cn-wuhan-lr-a";
+
+    Console.WriteLine($"[生成镜像服务器] 使用预设配置:");
+    Console.WriteLine($"[生成镜像服务器] - 区域: {region.LocalName}");
+    Console.WriteLine($"[生成镜像服务器] - 实例类型: {instanceType}");
+    Console.WriteLine($"[生成镜像服务器] - 可用区: {zoneId}");
+    Console.WriteLine($"[生成镜像服务器] - 镜像ID: {ImageID}");
+
+    var client = CreateClient(region.Endpoint);
+
+    // 创建实例
+    var createServer = CreateInstance(client, region, zoneId, ImageID, instanceType, $"ACE-IMAGE-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
+    if (createServer == null)
+    {
+        Console.WriteLine("[生成镜像服务器] 错误：创建实例失败");
+        return null;
+    }
+
+    string instanceId = createServer.Body.InstanceId;
+    Console.WriteLine($"[生成镜像服务器] 实例创建成功: {instanceId}");
+
+    // 等待实例进入Stopped状态
+    const int maxInitWaitTime = 10;
+    bool isReady = false;
+    for (int i = 0; i < maxInitWaitTime; i++)
+    {
+        var instances = DescribeInstances(client, region, instanceId);
+        if (instances != null && instances.Any())
+        {
+            var instance = instances.First();
+            Console.WriteLine($"[生成镜像服务器] 等待实例就绪，当前状态: {instance.Status}");
+            if (instance.Status == "Stopped")
+            {
+                isReady = true;
+                break;
+            }
+        }
+        Thread.Sleep(1000);
+    }
+
+    if (!isReady)
+    {
+        Console.WriteLine("[生成镜像服务器] 错误：实例初始化超时");
+        DeleteInstance(client, region.RegionId, instanceId);
+        return null;
+    }
+
+    // 分配公网IP
+    string publicIPAddress = "";
+    const int maxRetries = 3;
+    for (int i = 0; i < maxRetries; i++)
+    {
+        try
+        {
+            publicIPAddress = AllocatePublicIpAddress(client, instanceId);
+            if (!string.IsNullOrEmpty(publicIPAddress))
+            {
+                Console.WriteLine($"[生成镜像服务器] 成功分配公网IP: {publicIPAddress}");
+                break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[生成镜像服务器] 第{i + 1}次分配IP失败: {ex.Message}");
+            Thread.Sleep(1000);
+        }
+    }
+
+    if (string.IsNullOrEmpty(publicIPAddress))
+    {
+        Console.WriteLine("[生成镜像服务器] 错误：设置公网IP失败");
+        DeleteInstance(client, region.RegionId, instanceId);
+        return null;
+    }
+
+    // 启动实例
+    Console.WriteLine("[生成镜像服务器] 开始启动实例...");
+    try
+    {
+        StartInstance(client, instanceId);
+        Thread.Sleep(2000);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[生成镜像服务器] 启动实例失败: {ex.Message}");
+        DeleteInstance(client, region.RegionId, instanceId);
+        return null;
+    }
+
+    // 等待实例完全启动
+    const int maxWaitTime = 15;
+    bool isRunning = false;
+    for (int i = 0; i < maxWaitTime; i++)
+    {
+        var instances = DescribeInstances(client, region, instanceId);
+        if (instances != null && instances.Any())
+        {
+            var instance = instances.First();
+            Console.WriteLine($"[生成镜像服务器] 实例状态: {instance.Status}");
+            if (instance.Status == "Running")
+            {
+                isRunning = true;
+                break;
+            }
+        }
+        Thread.Sleep(1000);
+    }
+
+    if (!isRunning)
+    {
+        Console.WriteLine("[生成镜像服务器] 错误：实例启动超时");
+        DeleteInstance(client, region.RegionId, instanceId);
+        return null;
+    }
+
+    Server server = new Server
+    {
+        ServerID = instanceId,
+        ServerName = $"ACE-IMAGE-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
+        IP_Address = publicIPAddress,
+        Port = "27015",
+        ServerLocation = region.RegionId,
+        Status = "Running",
+        ISP = "ALiYun"
+    };
+
+    Console.WriteLine($"[生成镜像服务器] 服务器创建完成: {server.IP_Address}");
+    Console.ForegroundColor = ConsoleColor.White;
+    return server;
+}
+```
+
+### CreateClient() - 创建客户端
+
+```csharp
+public static AlibabaCloud.SDK.Ecs20140526.Client CreateClient(string Endpoint = "ecs-cn-hangzhou.aliyuncs.com")
+{
+    var config = new AlibabaCloud.OpenApiClient.Models.Config
+    {
+        AccessKeyId = "your-access-key-id",
+        AccessKeySecret = "your-access-key-secret",
+        Endpoint = Endpoint
+    };
+    
+    return new AlibabaCloud.SDK.Ecs20140526.Client(config);
+}
+```
+
+### CreateInstance() - 创建实例
+
+```csharp
+public static CreateInstanceResponse CreateInstance(
+    AlibabaCloud.SDK.Ecs20140526.Client client,
+    Region region,
+    string ZoneId,
+    string ImageId,
+    string InstanceType,
+    string HostName,
+    bool IsNoSpot = false
+)
+{
+    var createInstanceRequest = new CreateInstanceRequest
+    {
+        RegionId = region.RegionId,
+        ZoneId = ZoneId,
+        ImageId = ImageId,
+        InstanceType = InstanceType,
+        HostName = HostName,
+        InstanceName = HostName,
+        SecurityGroupId = "your-security-group-id",
+        VSwitchId = "your-vswitch-id",
+        InternetChargeType = "PayByTraffic",
+        InternetMaxBandwidthOut = 100,
+        SystemDiskCategory = "cloud_essd",
+        SystemDiskSize = 40,
+        Password = "your-password",
+        SpotStrategy = IsNoSpot ? "NoSpot" : "SpotAsPriceGo",
+        SpotPriceLimit = IsNoSpot ? null : "0.5"
+    };
+
+    try
+    {
+        var response = client.CreateInstance(createInstanceRequest);
+        return response;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"创建实例失败: {ex.Message}");
+        return null;
+    }
+}
+```
+
+### StartInstance() - 启动实例
+
+```csharp
+public static void StartInstance(AlibabaCloud.SDK.Ecs20140526.Client client, string InstanceId)
+{
+    var startInstanceRequest = new StartInstanceRequest
+    {
+        InstanceId = InstanceId
+    };
+
+    try
+    {
+        var response = client.StartInstance(startInstanceRequest);
+        Console.WriteLine($"启动实例成功: {InstanceId}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"启动实例失败: {ex.Message}");
+        throw;
+    }
+}
+```
+
+### DescribeInstances() - 查询实例
+
+```csharp
+public static List<DescribeInstancesResponseBodyInstancesInstance> DescribeInstances(
+    AlibabaCloud.SDK.Ecs20140526.Client client, 
+    Region region, 
+    string InstanceId)
+{
+    var describeInstancesRequest = new DescribeInstancesRequest
+    {
+        RegionId = region.RegionId,
+        InstanceIds = $"[{InstanceId}]"
+    };
+
+    try
+    {
+        var response = client.DescribeInstances(describeInstancesRequest);
+        return response.Body.Instances;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"查询实例失败: {ex.Message}");
+        return null;
+    }
+}
+```
+
+### AllocatePublicIpAddress() - 分配公网IP
+
+```csharp
+public static string AllocatePublicIpAddress(AlibabaCloud.SDK.Ecs20140526.Client client, string InstanceId)
+{
+    var allocatePublicIpAddressRequest = new AllocatePublicIpAddressRequest
+    {
+        InstanceId = InstanceId
+    };
+
+    try
+    {
+        var response = client.AllocatePublicIpAddress(allocatePublicIpAddressRequest);
+        return response.Body.IpAddress;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"分配公网IP失败: {ex.Message}");
+        return null;
+    }
+}
+```
+
+### DeleteInstance() - 删除实例
+
+```csharp
+public static void DeleteInstance(AlibabaCloud.SDK.Ecs20140526.Client client, string RegionId, string InstanceId)
+{
+    var deleteInstanceRequest = new DeleteInstanceRequest
+    {
+        RegionId = RegionId,
+        InstanceId = InstanceId,
+        Force = true
+    };
+
+    try
+    {
+        var response = client.DeleteInstance(deleteInstanceRequest);
+        Console.WriteLine($"删除实例成功: {InstanceId}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"删除实例失败: {ex.Message}");
+    }
+}
+```
+
+### CreateCustomImage() - 创建自定义镜像
+
+```csharp
+public static string CreateCustomImage(AlibabaCloud.SDK.Ecs20140526.Client client, string RegionId, string InstanceId, string ImageName)
+{
+    var createImageRequest = new CreateImageRequest
+    {
+        RegionId = RegionId,
+        InstanceId = InstanceId,
+        ImageName = ImageName,
+        ImageFamily = "ACE-GameServer",
+        Description = "ACE Game Server Image"
+    };
+
+    try
+    {
+        var response = client.CreateImage(createImageRequest);
+        return response.Body.ImageId;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"创建自定义镜像失败: {ex.Message}");
+        return null;
+    }
+}
+```
+
+### FindImageActionStatus() - 查询镜像创建状态
+
+```csharp
+public static string FindImageActionStatus(AlibabaCloud.SDK.Ecs20140526.Client client, string RegionId, string ImageId)
+{
+    var describeImagesRequest = new DescribeImagesRequest
+    {
+        RegionId = RegionId,
+        ImageId = ImageId
+    };
+
+    try
+    {
+        var response = client.DescribeImages(describeImagesRequest);
+        var image = response.Body.Images.FirstOrDefault();
+        return image?.Status;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"查询镜像状态失败: {ex.Message}");
+        return null;
+    }
+}
+```
+
+### DistributeImage() - 分发镜像
+
+```csharp
+public static string DistributeImage(
+    AlibabaCloud.SDK.Ecs20140526.Client client, 
+    string RegionId, 
+    string ImageId, 
+    string DestinationRegionId,
+    string DestinationImageName)
+{
+    var copyImageRequest = new CopyImageRequest
+    {
+        RegionId = RegionId,
+        ImageId = ImageId,
+        DestinationRegionId = DestinationRegionId,
+        DestinationImageName = DestinationImageName
+    };
+
+    try
+    {
+        var response = client.CopyImage(copyImageRequest);
+        return response.Body.ImageId;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"分发镜像失败: {ex.Message}");
+        return null;
+    }
+}
+```
+
+### DeleteImage() - 删除镜像
+
+```csharp
+public static bool DeleteImage(AlibabaCloud.SDK.Ecs20140526.Client client, string RegionId, string ImageId)
+{
+    var deleteImageRequest = new DeleteImageRequest
+    {
+        RegionId = RegionId,
+        ImageId = ImageId,
+        Force = true
+    };
+
+    try
+    {
+        var response = client.DeleteImage(deleteImageRequest);
+        Console.WriteLine($"删除镜像成功: {ImageId}");
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"删除镜像失败: {ex.Message}");
+        return false;
+    }
+}
+```
+
+## 区域配置
+
+### 支持的区域列表
+
+```csharp
+public static List<Region> Region { get; set; } = new List<Region>
+{
+    new Region { LocalName = "华北1（青岛）", RegionEndpoint = "ecs.cn-qingdao.aliyuncs.com", RegionId = "cn-qingdao", Status = "available" , Endpoint = "ecs.cn-qingdao.aliyuncs.com" },
+    new Region { LocalName = "华北2（北京）", RegionEndpoint = "ecs.cn-beijing.aliyuncs.com", RegionId = "cn-beijing", Status = "available" , Endpoint = "ecs.cn-beijing.aliyuncs.com" },
+    new Region { LocalName = "华北3（张家口）", RegionEndpoint = "ecs.cn-zhangjiakou.aliyuncs.com", RegionId = "cn-zhangjiakou", Status = "available" , Endpoint = "ecs.cn-zhangjiakou.aliyuncs.com" },
+    new Region { LocalName = "华北5（呼和浩特）", RegionEndpoint = "ecs.cn-huhehaote.aliyuncs.com", RegionId = "cn-huhehaote", Status = "available" , Endpoint = "ecs.cn-huhehaote.aliyuncs.com" },
+    new Region { LocalName = "华北6（乌兰察布）", RegionEndpoint = "ecs.cn-wulanchabu.aliyuncs.com", RegionId = "cn-wulanchabu", Status = "available" , Endpoint = "ecs.cn-wulanchabu.aliyuncs.com" },
+    new Region { LocalName = "华东1（杭州）", RegionEndpoint = "ecs.aliyuncs.com", RegionId = "cn-hangzhou", Status = "available" , Endpoint = "ecs.cn-hangzhou.aliyuncs.com"  },
+    new Region { LocalName = "华东2（上海）", RegionEndpoint = "ecs.cn-shanghai.aliyuncs.com", RegionId = "cn-shanghai", Status = "available" , Endpoint = "ecs.cn-shanghai.aliyuncs.com"  },
+    new Region { LocalName = "华东5（南京-本地地域）", RegionEndpoint = "ecs.cn-nanjing.aliyuncs.com", RegionId = "cn-nanjing", Status = "available" , Endpoint = "ecs.cn-nanjing.aliyuncs.com"  },
+    new Region { LocalName = "华南1（深圳）", RegionEndpoint = "ecs.cn-shenzhen.aliyuncs.com", RegionId = "cn-shenzhen", Status = "available"  , Endpoint = "ecs.cn-shenzhen.aliyuncs.com"  },
+    new Region { LocalName = "华南2（河源）", RegionEndpoint = "ecs.cn-heyuan.aliyuncs.com", RegionId = "cn-heyuan", Status = "available" , Endpoint = "ecs.cn-heyuan.aliyuncs.com"   },
+    new Region { LocalName = "华南3（广州）", RegionEndpoint = "ecs.cn-guangzhou.aliyuncs.com", RegionId = "cn-guangzhou", Status = "available" , Endpoint = "ecs.cn-guangzhou.aliyuncs.com"},
+    new Region { LocalName = "华东6（福州-本地地域）", RegionEndpoint = "ecs.cn-fuzhou.aliyuncs.com", RegionId = "cn-fuzhou", Status = "available"  , Endpoint = "ecs.cn-fuzhou.aliyuncs.com"},
+    new Region { LocalName = "华中1（武汉-本地地域）", RegionEndpoint = "ecs.cn-wuhan-lr.aliyuncs.com", RegionId = "cn-wuhan-lr", Status = "available" , Endpoint = "ecs.cn-wuhan-lr.aliyuncs.com" },
+    new Region { LocalName = "西南1（成都）", RegionEndpoint = "ecs.cn-chengdu.aliyuncs.com", RegionId = "cn-chengdu", Status = "available" , Endpoint = "ecs.cn-chengdu.aliyuncs.com"},
+    new Region { LocalName = "中国香港", RegionEndpoint = "ecs.cn-hongkong.aliyuncs.com", RegionId = "cn-hongkong", Status = "available" , Endpoint = "ecs.cn-hongkong.aliyuncs.com" }
+};
+```
+
+## 实例配置
+
+### 实例类型配置
+
+```csharp
+public static class InstanceConfig
+{
+    public static readonly Dictionary<string, string> InstanceTypes = new()
+    {
+        { "small", "ecs.e-c1m2.xlarge" },
+        { "medium", "ecs.e-c1m4.xlarge" },
+        { "large", "ecs.e-c1m8.xlarge" }
+    };
+    
+    public static readonly Dictionary<string, string> ZoneIds = new()
+    {
+        { "cn-wuhan-lr", "cn-wuhan-lr-a" },
+        { "cn-beijing", "cn-beijing-a" },
+        { "cn-shanghai", "cn-shanghai-a" }
+    };
+}
+```
+
+## 错误处理
+
+### 1. 实例创建失败处理
+
+```csharp
+public static async Task HandleInstanceCreationFailure(string regionId, string instanceType, Exception ex)
+{
+    Console.WriteLine($"实例创建失败: 区域={regionId}, 类型={instanceType}, 错误={ex.Message}");
+    
+    // 记录错误日志
+    await LogInstanceCreationError(regionId, instanceType, ex);
+    
+    // 检查是否需要切换区域
+    if (ex.Message.Contains("InsufficientCapacity"))
+    {
+        await TryAlternativeRegion(regionId, instanceType);
+    }
+}
+```
+
+### 2. 网络配置失败处理
+
+```csharp
+public static async Task HandleNetworkConfigurationFailure(string instanceId, Exception ex)
+{
+    Console.WriteLine($"网络配置失败: 实例={instanceId}, 错误={ex.Message}");
+    
+    // 尝试重新配置网络
+    await RetryNetworkConfiguration(instanceId);
+    
+    // 如果仍然失败，删除实例
+    if (await IsNetworkConfigurationFailed(instanceId))
+    {
+        await DeleteFailedInstance(instanceId);
+    }
+}
+```
+
+## 性能优化
+
+### 1. 客户端连接池
+
+```csharp
+public class ECSClientPool
+{
+    private static readonly ConcurrentDictionary<string, AlibabaCloud.SDK.Ecs20140526.Client> _clientPool = new();
+    
+    public static AlibabaCloud.SDK.Ecs20140526.Client GetClient(string endpoint)
+    {
+        return _clientPool.GetOrAdd(endpoint, ep => CreateClient(ep));
+    }
+    
+    public static void ClearPool()
+    {
+        _clientPool.Clear();
+    }
+}
+```
+
+### 2. 批量操作
+
+```csharp
+public static class BatchOperations
+{
+    public static async Task<List<Server>> BatchCreateInstances(List<string> matchIds)
+    {
+        var tasks = matchIds.Select(matchId => Task.Run(() => ApplyMatchServer(matchId)));
+        var results = await Task.WhenAll(tasks);
+        return results.Where(r => r != null).ToList();
+    }
+    
+    public static async Task BatchDeleteInstances(List<string> instanceIds)
+    {
+        var tasks = instanceIds.Select(instanceId => Task.Run(() => DeleteInstance(null, null, instanceId)));
+        await Task.WhenAll(tasks);
+    }
+}
+```
+
+## 监控和维护
+
+### 1. 实例健康检查
+
+```csharp
+public static class InstanceHealthCheck
+{
+    public static async Task<bool> CheckInstanceHealth(string instanceId, string regionId)
+    {
+        try
+        {
+            var region = Region.FirstOrDefault(r => r.RegionId == regionId);
+            if (region == null)
+                return false;
+            
+            var client = CreateClient(region.Endpoint);
+            var instances = DescribeInstances(client, region, instanceId);
+            
+            if (instances == null || !instances.Any())
+                return false;
+            
+            var instance = instances.First();
+            return instance.Status == "Running";
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"检查实例健康状态失败: {ex.Message}");
+            return false;
+        }
+    }
+}
+```
+
+### 2. 性能监控
+
+```csharp
+public static class ECSMetrics
+{
+    public static readonly Counter InstanceCreations = Metrics.CreateCounter("ecs_instance_creations_total", "Total ECS instance creations");
+    public static readonly Counter InstanceDeletions = Metrics.CreateCounter("ecs_instance_deletions_total", "Total ECS instance deletions");
+    public static readonly Gauge ActiveInstances = Metrics.CreateGauge("ecs_active_instances", "Number of active ECS instances");
+    public static readonly Histogram InstanceCreationTime = Metrics.CreateHistogram("ecs_instance_creation_time_seconds", "ECS instance creation time");
+    public static readonly Histogram InstanceStartupTime = Metrics.CreateHistogram("ecs_instance_startup_time_seconds", "ECS instance startup time");
+}
+```
+
+## 最佳实践
+
+### 1. 创建实例
+
+```csharp
+public static async Task<Server> CreateInstanceSafely(string matchId, string regionId = "cn-wuhan-lr")
+{
+    try
+    {
+        var region = Region.FirstOrDefault(r => r.RegionId == regionId);
+        if (region == null)
+        {
+            throw new ArgumentException($"不支持的区域: {regionId}");
+        }
+        
+        var server = ApplyMatchServer(matchId);
+        if (server == null)
+        {
+            throw new Exception("实例创建失败");
+        }
+        
+        // 记录指标
+        ECSMetrics.InstanceCreations.Inc();
+        
+        return server;
+    }
+    catch (Exception ex)
+    {
+        await HandleInstanceCreationFailure(regionId, "ecs.e-c1m2.xlarge", ex);
+        throw;
+    }
+}
+```
+
+### 2. 实例状态同步
+
+```csharp
+public static async Task SyncInstanceStatus(Server server)
+{
+    try
+    {
+        var region = Region.FirstOrDefault(r => r.RegionId == server.ServerLocation);
+        if (region == null)
+            return;
+        
+        var client = CreateClient(region.Endpoint);
+        var instances = DescribeInstances(client, region, server.ServerID);
+        
+        if (instances != null && instances.Any())
+        {
+            var instance = instances.First();
+            server.Status = instance.Status;
+            
+            // 更新数据库中的状态
+            await UpdateServerStatusInDatabase(server);
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"同步实例状态失败: {ex.Message}");
+    }
+}
+```
+
+### 3. 实例清理
+
+```csharp
+public static async Task CleanupInstance(Server server)
+{
+    try
+    {
+        if (!string.IsNullOrEmpty(server.ServerID) && !string.IsNullOrEmpty(server.ServerLocation))
+        {
+            var region = Region.FirstOrDefault(r => r.RegionId == server.ServerLocation);
+            if (region != null)
+            {
+                var client = CreateClient(region.Endpoint);
+                DeleteInstance(client, region.RegionId, server.ServerID);
+                
+                // 记录指标
+                ECSMetrics.InstanceDeletions.Inc();
+                
+                Console.WriteLine($"实例清理完成: {server.ServerID}");
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"实例清理失败: {ex.Message}");
+    }
+}
+```
+
+## 总结
+
+AliYunCloundECS 模型通过完善的阿里云SDK集成，实现了ECS实例的完整生命周期管理。通过区域配置、实例创建、网络配置、状态监控等功能，为整个系统提供了可靠的云服务器支持。
+
+该模型不仅处理了复杂的云服务操作，还实现了完善的错误处理和性能优化机制，确保了云服务的稳定性和可靠性。 

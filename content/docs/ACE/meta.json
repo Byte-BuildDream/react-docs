@@ -1,0 +1,10 @@
+{
+  "title": "ACE 后端文档中心",
+  "description": "ACE 后端文档",
+  "icon": "Activity",
+  "root": true,
+  "pages": [
+    "index",
+    "..."
+  ]
+}

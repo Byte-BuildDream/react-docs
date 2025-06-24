@@ -5,6 +5,7 @@ import type { MDXComponents } from 'mdx/types';
 import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 import * as icons from 'lucide-react';
 import { CodeBlock, Pre } from 'fumadocs-ui/components/codeblock';
+import { Mermaid } from './components/features/mdx/mermaid';
 
 export function getMDXComponents(components?: MDXComponents): MDXComponents {
   return {
@@ -19,6 +20,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
         <Pre>{props.children}</Pre>
       </CodeBlock>
     ),
+    Mermaid,
     ...components,
   };
 }
