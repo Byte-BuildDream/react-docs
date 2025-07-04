@@ -1,0 +1,134 @@
+---
+title: "Websocket接口文档"
+description: "Microsoft.AspNetCore.SignalR 自定义竞技房间接口文档"
+---
+
+# Websocket接口文档
+
+## 概述
+
+本文档描述了基于Microsoft.AspNetCore.SignalR的自定义竞技房间Websocket接口，适用于前后端开发人员。
+
+### 连接信息
+
+- **Websocket地址**: `https://localhost:5001/PlayerHubService`
+- **协议**: SignalR
+- **认证**: 需要用户身份验证
+
+### 基础交互对象
+
+#### Room（房间对象）
+
+房间对象是当前接口的基础交互对象，用于创建、加入、房间设置等操作。
+
+```json
+{
+    "ID": "072504001",
+    "Name": "测试房间",
+    "Type": "1",
+    "MaxPlayer": 10,
+    "Password": "",
+    "Owner": "玩家的uid",
+    "Member": ["玩家的uid", "玩家的uid"],
+    "Watch": ["玩家的uid", "玩家的uid"],
+    "Ready": ["玩家的uid", "玩家的uid"],
+    "Game": {
+        "ID": "CutomMatch - 房间ID",
+        "Map": "de_dust2",
+        "Mode": "竞技模式"
+    },
+    "Room_Setting": {
+        "Region": "北京",
+        "Mode": "5v5",
+        "Player_Choose": true,
+        "Team_Balance": false
+    },
+    "status": "等待中",
+    "CreateTime": "2025-07-04 10:00:00"
+}
+```
+
+#### 字段说明
+
+| 字段名 | 类型 | 必填 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| ID | string | 是 | - | 房间ID，系统生成 |
+| Name | string | 是 | 玩家名称 + 的房间 | 房间名称 |
+| Type | string | 是 | "1" | 房间类型："1"=公共房间，"2"=私人房间 |
+| MaxPlayer | int | 是 | 10 | 最大玩家数量，可选：10、6、4、2 |
+| Password | string | 是 | "" | 房间密码，传输时需加密 |
+| Owner | string | 是 | - | 房主的uid |
+| Member | array | 是 | [] | 成员列表，包括房主 |
+| Watch | array | 是 | [] | 观战席位列表 |
+| Ready | array | 是 | [] | 准备玩家列表 |
+| Game | object | 是 | - | 游戏设置对象 |
+| Room_Setting | object | 是 | - | 房间设置对象 |
+| status | string | 是 | "等待中" | 房间状态：等待中、准备中、游戏中 |
+| CreateTime | string | 是 | - | 创建时间，系统生成 |
+
+#### Game对象字段
+
+| 字段名 | 类型 | 必填 | 默认值 | 可选值 |
+|--------|------|------|--------|--------|
+| ID | string | 是 | CutomMatch - 房间ID | - |
+| Map | string | 是 | de_dust2 | de_dust2、de_mirage、de_inferno、de_nuke、de_train、de_overpass、de_vertigo |
+| Mode | string | 是 | 竞技模式 | 竞技模式、爆头竞技模式、死亡竞赛模式、爆头死亡竞赛模式 |
+
+#### Room_Setting对象字段
+
+| 字段名 | 类型 | 必填 | 默认值 | 可选值 |
+|--------|------|------|--------|--------|
+| Region | string | 是 | 北京 | 北京、上海、广州、洛阳、成都 |
+| Mode | string | 是 | 5v5 | 5v5、3v3、2v2、1v1 |
+| Player_Choose | bool | 是 | true | true、false |
+| Team_Balance | bool | 是 | false | true、false |
+
+## 接口列表
+
+### 房间管理接口
+
+- [创建房间](./create-room.mdx)
+- [加入房间](./join-room.mdx)
+- [离开房间](./leave-room.mdx)
+- [踢出玩家](./kick-player.mdx)
+- [转让房主权限](./transfer-ownership.mdx)
+
+### 房间设置接口
+
+- [设置房间密码](./set-password.mdx)
+- [更改房间设置](./update-room-settings.mdx)
+- [更改游戏设置](./update-game-settings.mdx)
+
+### 玩家管理接口
+
+- [切换玩家位置](./switch-player-position.mdx)
+- [玩家准备/取消准备](./player-ready.mdx)
+
+### 事件通知
+
+- [房间信息更新](./room-events.mdx)
+- [玩家状态变化](./player-events.mdx)
+- [游戏状态变化](./game-events.mdx)
+
+## 错误码说明
+
+| 错误码 | 说明 |
+|--------|------|
+| 1001 | 参数错误 |
+| 1002 | 房间不存在 |
+| 1003 | 房间已满 |
+| 1004 | 权限不足 |
+| 1005 | 玩家已在房间中 |
+| 1006 | 玩家不在房间中 |
+| 1007 | 房间密码错误 |
+| 1008 | 房间状态不允许操作 |
+| 1009 | 网络连接异常 |
+| 1010 | 服务器内部错误 |
+
+## 注意事项
+
+1. **安全性**: 所有敏感信息（如密码）在传输前必须加密
+2. **权限控制**: 只有房主可以执行房间管理操作
+3. **状态同步**: 房间状态变化会实时推送给所有房间成员
+4. **连接管理**: 客户端断开连接后会自动离开房间
+5. **数据一致性**: 确保房间数据的实时性和一致性 

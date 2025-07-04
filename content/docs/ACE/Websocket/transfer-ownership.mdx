@@ -1,0 +1,436 @@
+---
+title: "转让房主权限"
+description: "TransferOwnership - 转让房主权限接口"
+---
+
+# 转让房主权限接口
+
+## 接口信息
+
+- **接口名称**: `TransferOwnership`
+- **描述**: 房主将房主权限转让给房间内的其他成员
+- **调用方式**: SignalR Hub方法调用
+
+## 参数说明
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| roomID | string | 是 | 房间ID |
+| newOwnerUID | string | 是 | 新房主的UID |
+| currentOwnerUID | string | 是 | 当前房主的UID |
+
+### 参数示例
+
+```json
+{
+    "roomID": "072504001",
+    "newOwnerUID": "08233-87956-48746-16119-67337",
+    "currentOwnerUID": "12345-67890-12345-67890-12345"
+}
+```
+
+## 调用示例
+
+### 前端调用（JavaScript）
+
+```javascript
+// 转让房主权限
+connection.invoke("TransferOwnership", "072504001", "08233-87956-48746-16119-67337", "12345-67890-12345-67890-12345")
+    .then(result => {
+        console.log("转让房主权限成功:", result);
+    })
+    .catch(err => {
+        console.error("转让房主权限失败:", err);
+    });
+```
+
+### 后端实现（C#）
+
+```csharp
+public class PlayerHubService : Hub
+{
+    public async Task<Room> TransferOwnership(string roomID, string newOwnerUID, string currentOwnerUID)
+    {
+        try
+        {
+            // 验证当前房主身份
+            if (!ValidateUser(currentOwnerUID))
+            {
+                throw new HubException("当前房主身份验证失败");
+            }
+
+            // 检查房间是否存在
+            var room = await GetRoomFromDatabase(roomID);
+            if (room == null)
+            {
+                throw new HubException("房间不存在");
+            }
+
+            // 检查当前操作者是否为房主
+            if (room.Owner != currentOwnerUID)
+            {
+                throw new HubException("只有房主可以转让权限");
+            }
+
+            // 检查房间状态
+            if (room.status != "等待中")
+            {
+                throw new HubException("房间状态不允许转让权限");
+            }
+
+            // 检查新房主是否在房间中
+            bool isInMember = room.Member.Contains(newOwnerUID);
+            bool isInWatch = room.Watch.Contains(newOwnerUID);
+            
+            if (!isInMember && !isInWatch)
+            {
+                throw new HubException("新房主不在房间中");
+            }
+
+            // 检查是否转让给自己
+            if (newOwnerUID == currentOwnerUID)
+            {
+                throw new HubException("不能转让给自己");
+            }
+
+            // 记录转让前的房主信息
+            var oldOwnerName = GetPlayerName(currentOwnerUID);
+            var newOwnerName = GetPlayerName(newOwnerUID);
+
+            // 转让房主权限
+            room.Owner = newOwnerUID;
+
+            // 如果新房主在观战席位，将其移动到成员列表
+            if (isInWatch)
+            {
+                room.Watch.Remove(newOwnerUID);
+                room.Member.Add(newOwnerUID);
+            }
+
+            // 更新数据库
+            await UpdateRoomInDatabase(room);
+
+            // 广播房间信息更新
+            await Clients.Group(roomID).SendAsync("TeamInfo", room);
+
+            // 广播房主转让事件
+            await Clients.Group(roomID).SendAsync("OwnershipTransferred", new
+            {
+                roomID = roomID,
+                oldOwnerUID = currentOwnerUID,
+                oldOwnerName = oldOwnerName,
+                newOwnerUID = newOwnerUID,
+                newOwnerName = newOwnerName,
+                transferTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+            });
+
+            // 向新房主发送特殊通知
+            var newOwnerConnectionId = await GetPlayerConnectionId(newOwnerUID);
+            if (!string.IsNullOrEmpty(newOwnerConnectionId))
+            {
+                await Clients.Client(newOwnerConnectionId).SendAsync("YouAreNowOwner", new
+                {
+                    roomID = roomID,
+                    roomName = room.Name,
+                    transferTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                });
+            }
+
+            return room;
+        }
+        catch (Exception ex)
+        {
+            throw new HubException($"转让房主权限失败: {ex.Message}");
+        }
+    }
+}
+```
+
+## 返回事件
+
+### TeamInfo 事件
+
+当房主权限转让成功后，服务器会向房间内所有玩家广播 `TeamInfo` 事件。
+
+#### 事件名称
+`TeamInfo`
+
+#### 事件数据
+```json
+{
+    "ID": "072504001",
+    "Name": "测试房间",
+    "Type": "1",
+    "MaxPlayer": 10,
+    "Password": "",
+    "Owner": "08233-87956-48746-16119-67337",
+    "Member": [
+        "08233-87956-48746-16119-67337",
+        "12345-67890-12345-67890-12345"
+    ],
+    "Watch": [],
+    "Ready": [],
+    "Game": {
+        "ID": "CutomMatch - 072504001",
+        "Map": "de_dust2",
+        "Mode": "竞技模式"
+    },
+    "Room_Setting": {
+        "Region": "北京",
+        "Mode": "5v5",
+        "Player_Choose": true,
+        "Team_Balance": false
+    },
+    "status": "等待中",
+    "CreateTime": "2025-07-04 10:00:00"
+}
+```
+
+### OwnershipTransferred 事件
+
+当房主权限转让时，服务器会广播 `OwnershipTransferred` 事件。
+
+#### 事件名称
+`OwnershipTransferred`
+
+#### 事件数据
+```json
+{
+    "roomID": "072504001",
+    "oldOwnerUID": "12345-67890-12345-67890-12345",
+    "oldOwnerName": "原房主",
+    "newOwnerUID": "08233-87956-48746-16119-67337",
+    "newOwnerName": "新房主",
+    "transferTime": "2025-07-04 10:30:00"
+}
+```
+
+### YouAreNowOwner 事件
+
+当玩家成为新房主时，服务器会向新房主发送 `YouAreNowOwner` 事件。
+
+#### 事件名称
+`YouAreNowOwner`
+
+#### 事件数据
+```json
+{
+    "roomID": "072504001",
+    "roomName": "测试房间",
+    "transferTime": "2025-07-04 10:30:00"
+}
+```
+
+### 前端监听示例
+
+```javascript
+// 监听房间信息更新
+connection.on("TeamInfo", (roomData) => {
+    console.log("房间信息更新:", roomData);
+    updateRoomUI(roomData);
+});
+
+// 监听房主转让事件
+connection.on("OwnershipTransferred", (data) => {
+    console.log(`房主权限从 ${data.oldOwnerName} 转让给 ${data.newOwnerName}`);
+    showNotification(`房主权限已转让给 ${data.newOwnerName}`);
+    updateOwnerUI(data);
+});
+
+// 监听成为新房主事件
+connection.on("YouAreNowOwner", (data) => {
+    console.log(`你已成为房间 ${data.roomName} 的房主`);
+    showNotification(`恭喜！你已成为房间的房主`);
+    // 更新UI显示房主权限
+    updateOwnerPermissions();
+});
+```
+
+## 执行流程图
+
+
+<Mermaid
+  chart="
+graph TD
+    A[客户端调用TransferOwnership] --> B[验证当前房主身份]
+    B --> C{身份验证通过?}
+    C -->|否| D[返回错误]
+    C -->|是| E[检查房间是否存在]
+    E --> F{房间存在?}
+    F -->|否| G[返回房间不存在错误]
+    F -->|是| H[检查操作者是否为房主]
+    H --> I{是房主?}
+    I -->|否| J[返回权限错误]
+    I -->|是| K[检查房间状态]
+    K --> L{状态允许转让?}
+    L -->|否| M[返回状态错误]
+    L -->|是| N[检查新房主是否在房间]
+    N --> O{新房主在房间?}
+    O -->|否| P[返回新房主不在房间错误]
+    O -->|是| Q[检查是否转让给自己]
+    Q --> R{转让给自己?}
+    R -->|是| S[返回不能转让给自己错误]
+    R -->|否| T[记录转让信息]
+    T --> U[转让房主权限]
+    U --> V{新房主在观战席位?}
+    V -->|是| W[移动到成员列表]
+    V -->|否| X[更新数据库]
+    W --> X
+    X --> Y[广播TeamInfo事件]
+    Y --> Z[广播OwnershipTransferred事件]
+    Z --> AA[发送YouAreNowOwner事件]
+    AA --> BB[返回房间信息]
+    
+    D --> CC[错误处理]
+    G --> CC
+    J --> CC
+    M --> CC
+    P --> CC
+    S --> CC
+    CC --> DD[返回错误信息]"
+/>
+
+
+
+
+
+## 错误处理
+
+### 常见错误码
+
+| 错误码 | 错误信息 | 处理方式 |
+|--------|----------|----------|
+| 1001 | 参数错误 | 检查参数是否为空或格式错误 |
+| 1002 | 房间不存在 | 检查房间ID是否正确 |
+| 1004 | 权限不足 | 只有房主可以转让权限 |
+| 1006 | 玩家不在房间中 | 检查新房主是否真的在房间中 |
+| 1008 | 房间状态不允许操作 | 只有"等待中"状态允许转让 |
+| 1014 | 不能转让给自己 | 房主不能转让给自己 |
+| 1009 | 网络连接异常 | 检查网络连接状态 |
+| 1010 | 服务器内部错误 | 联系技术支持 |
+
+### 错误响应示例
+
+```json
+{
+    "error": {
+        "code": 1004,
+        "message": "权限不足",
+        "details": "只有房主可以转让权限"
+    }
+}
+```
+
+## 特殊情况处理
+
+### 1. 房主权限限制
+
+只有房主可以转让权限：
+
+- 普通玩家无法转让房主权限
+- 房主不能转让给自己
+- 转让后原房主成为普通成员
+
+### 2. 新房主位置处理
+
+如果新房主在观战席位：
+
+- 自动将其移动到成员列表
+- 确保新房主有完整的游戏权限
+- 更新房间成员结构
+
+### 3. 房间状态限制
+
+只有在"等待中"状态的房间才能转让权限：
+
+- "准备中"和"游戏中"状态不允许转让
+- 确保游戏进行中的稳定性
+
+### 4. 权限继承
+
+新房主继承所有房主权限：
+
+- 可以踢出玩家
+- 可以更改房间设置
+- 可以转让权限给其他人
+
+## 注意事项
+
+### 1. 权限控制
+- 严格限制只有房主可以转让权限
+- 防止恶意转让行为
+- 记录转让操作日志
+
+### 2. 用户体验
+- 新房主收到明确通知
+- 其他玩家看到转让提示
+- 更新UI显示房主信息
+
+### 3. 数据一致性
+- 转让操作立即生效
+- 确保所有玩家状态同步
+- 处理网络异常情况
+
+### 4. 安全性
+- 验证操作者身份
+- 防止重复转让
+- 记录操作历史
+
+### 5. 性能考虑
+- 使用异步操作
+- 批量处理状态更新
+- 避免不必要的数据库查询
+
+## 测试用例
+
+### 正常情况测试
+
+```javascript
+// 测试用例1：房主转让权限给成员
+connection.invoke("TransferOwnership", "072504001", "08233-87956-48746-16119-67337", "12345-67890-12345-67890-12345")
+    .then(room => {
+        assert(room.Owner === "08233-87956-48746-16119-67337");
+        console.log("测试通过：房主权限转让成功");
+    });
+
+// 测试用例2：房主转让权限给观战玩家
+connection.invoke("TransferOwnership", "072504001", "98765-43210-98765-43210-98765", "08233-87956-48746-16119-67337")
+    .then(room => {
+        assert(room.Owner === "98765-43210-98765-43210-98765");
+        assert(room.Member.includes("98765-43210-98765-43210-98765"));
+        assert(!room.Watch.includes("98765-43210-98765-43210-98765"));
+        console.log("测试通过：观战玩家成为房主并移动到成员列表");
+    });
+```
+
+### 异常情况测试
+
+```javascript
+// 测试用例3：普通玩家尝试转让权限
+connection.invoke("TransferOwnership", "072504001", "08233-87956-48746-16119-67337", "99999-99999-99999-99999-99999")
+    .then(() => {
+        console.error("测试失败：应该抛出错误");
+    })
+    .catch(error => {
+        assert(error.message.includes("只有房主可以转让权限"));
+        console.log("测试通过：权限不足被正确处理");
+    });
+
+// 测试用例4：房主尝试转让给自己
+connection.invoke("TransferOwnership", "072504001", "12345-67890-12345-67890-12345", "12345-67890-12345-67890-12345")
+    .then(() => {
+        console.error("测试失败：应该抛出错误");
+    })
+    .catch(error => {
+        assert(error.message.includes("不能转让给自己"));
+        console.log("测试通过：不能转让给自己被正确处理");
+    });
+```
+
+## 相关接口
+
+- [加入房间](./join-room.mdx)
+- [离开房间](./leave-room.mdx)
+- [踢出玩家](./kick-player.mdx)
+- [更改房间设置](./update-room-settings.mdx)
+- [房间信息更新](./room-events.mdx) 

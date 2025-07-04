@@ -1,0 +1,271 @@
+---
+title: "创建房间"
+description: "CreateRoom - 创建自定义竞技房间接口"
+---
+
+# 创建房间接口
+
+## 接口信息
+
+- **接口名称**: `CreateRoom`
+- **描述**: 用于创建一个自定义竞技房间
+- **调用方式**: SignalR Hub方法调用
+
+## 参数说明
+
+| 参数名 | 类型 | 必填 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| creatorUID | string | 是 | - | 创建者的UID |
+
+### 参数示例
+
+```json
+{
+    "creatorUID": "08233-87956-48746-16119-67337"
+}
+```
+
+## 调用示例
+
+### 前端调用（JavaScript）
+
+```javascript
+// 使用SignalR客户端调用
+const connection = new signalR.HubConnectionBuilder()
+    .withUrl("https://localhost:5001/PlayerHubService")
+    .build();
+
+// 调用创建房间接口
+connection.invoke("CreateRoom", "08233-87956-48746-16119-67337")
+    .then(result => {
+        console.log("房间创建成功:", result);
+    })
+    .catch(err => {
+        console.error("房间创建失败:", err);
+    });
+```
+
+### 后端实现（C#）
+
+```csharp
+public class PlayerHubService : Hub
+{
+    public async Task<Room> CreateRoom(string creatorUID)
+    {
+        try
+        {
+            // 验证用户身份
+            if (!ValidateUser(creatorUID))
+            {
+                throw new HubException("用户身份验证失败");
+            }
+
+            // 创建房间对象
+            var room = new Room
+            {
+                ID = GenerateRoomID(),
+                Name = GetPlayerName(creatorUID) + "的房间",
+                Type = "1", // 公共房间
+                MaxPlayer = 10,
+                Password = "",
+                Owner = creatorUID,
+                Member = new List<string> { creatorUID },
+                Watch = new List<string>(),
+                Ready = new List<string>(),
+                Game = new GameSettings
+                {
+                    ID = "CutomMatch - " + GenerateRoomID(),
+                    Map = "de_dust2",
+                    Mode = "竞技模式"
+                },
+                Room_Setting = new RoomSettings
+                {
+                    Region = "北京",
+                    Mode = "5v5",
+                    Player_Choose = true,
+                    Team_Balance = false
+                },
+                status = "等待中",
+                CreateTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+            };
+
+            // 保存房间到数据库
+            await SaveRoomToDatabase(room);
+
+            // 将创建者加入房间组
+            await Groups.AddToGroupAsync(Context.ConnectionId, room.ID);
+
+            // 广播房间创建事件
+            await Clients.All.SendAsync("RoomCreated", room);
+
+            return room;
+        }
+        catch (Exception ex)
+        {
+            throw new HubException($"创建房间失败: {ex.Message}");
+        }
+    }
+}
+```
+
+## 返回事件
+
+### TeamInfo 事件
+
+当房间创建成功后，服务器会向所有客户端广播 `TeamInfo` 事件，包含完整的房间信息。
+
+#### 事件名称
+`TeamInfo`
+
+#### 事件数据
+```json
+{
+    "ID": "072504001",
+    "Name": "测试房间",
+    "Type": "1",
+    "MaxPlayer": 10,
+    "Password": "",
+    "Owner": "08233-87956-48746-16119-67337",
+    "Member": ["08233-87956-48746-16119-67337"],
+    "Watch": [],
+    "Ready": [],
+    "Game": {
+        "ID": "CutomMatch - 072504001",
+        "Map": "de_dust2",
+        "Mode": "竞技模式"
+    },
+    "Room_Setting": {
+        "Region": "北京",
+        "Mode": "5v5",
+        "Player_Choose": true,
+        "Team_Balance": false
+    },
+    "status": "等待中",
+    "CreateTime": "2025-07-04 10:00:00"
+}
+```
+
+### 前端监听示例
+
+```javascript
+// 监听房间信息更新
+connection.on("TeamInfo", (roomData) => {
+    console.log("收到房间信息更新:", roomData);
+    // 更新UI显示
+    updateRoomUI(roomData);
+});
+```
+
+## 执行流程图
+
+
+<Mermaid
+  chart="
+    graph TD
+        A[客户端调用CreateRoom] --> B[验证用户身份]
+        B --> C{身份验证通过?}
+        C -->|否| D[返回错误]
+        C -->|是| E[生成房间ID]
+        E --> F[创建房间对象]
+        F --> G[设置默认值]
+        G --> H[保存到数据库]
+        H --> I[加入房间组]
+        I --> J[广播TeamInfo事件]
+        J --> K[返回房间对象]
+        K --> L[客户端接收房间信息]
+        D --> M[错误处理]
+        M --> N[返回错误信息]
+    "
+/>
+
+
+
+## 错误处理
+
+### 常见错误码
+
+| 错误码 | 错误信息 | 处理方式 |
+|--------|----------|----------|
+| 1001 | 参数错误 | 检查creatorUID是否为空或格式错误 |
+| 1004 | 权限不足 | 验证用户身份和权限 |
+| 1005 | 玩家已在房间中 | 检查用户是否已在其他房间 |
+| 1009 | 网络连接异常 | 检查网络连接状态 |
+| 1010 | 服务器内部错误 | 联系技术支持 |
+
+### 错误响应示例
+
+```json
+{
+    "error": {
+        "code": 1001,
+        "message": "参数错误: creatorUID不能为空",
+        "details": "创建房间时creatorUID参数为null或空字符串"
+    }
+}
+```
+
+## 注意事项
+
+### 1. 房间ID生成规则
+- 房间ID格式：`MMDDHHMMSS`（月日时分秒）
+- 确保ID唯一性，避免冲突
+- 建议添加随机数后缀
+
+### 2. 默认值设置
+- 房间名称：`玩家名称 + "的房间"`
+- 房间类型：公共房间（"1"）
+- 最大玩家数：10人
+- 地图：de_dust2
+- 游戏模式：竞技模式
+- 区域：北京
+
+### 3. 权限控制
+- 只有已认证的用户才能创建房间
+- 每个用户同时只能在一个房间中
+- 创建者自动成为房主
+
+### 4. 数据一致性
+- 房间创建成功后立即保存到数据库
+- 确保房间状态实时同步
+- 处理并发创建请求
+
+### 5. 性能考虑
+- 房间ID生成使用高效算法
+- 数据库操作使用异步方法
+- 避免不必要的数据库查询
+
+## 测试用例
+
+### 正常情况测试
+
+```javascript
+// 测试用例1：正常创建房间
+const testUID = "08233-87956-48746-16119-67337";
+connection.invoke("CreateRoom", testUID)
+    .then(room => {
+        assert(room.ID !== null);
+        assert(room.Owner === testUID);
+        assert(room.Member.includes(testUID));
+        console.log("测试通过：房间创建成功");
+    });
+```
+
+### 异常情况测试
+
+```javascript
+// 测试用例2：空UID
+connection.invoke("CreateRoom", "")
+    .then(() => {
+        console.error("测试失败：应该抛出错误");
+    })
+    .catch(error => {
+        assert(error.message.includes("参数错误"));
+        console.log("测试通过：空UID被正确拒绝");
+    });
+```
+
+## 相关接口
+
+- [加入房间](./join-room.mdx)
+- [离开房间](./leave-room.mdx)
+- [房间信息更新](./room-events.mdx) 

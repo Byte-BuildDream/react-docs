@@ -1,0 +1,542 @@
+---
+title: "更改房间设置"
+description: "UpdateRoomSettings - 更改房间设置接口"
+---
+
+# 更改房间设置接口
+
+## 接口信息
+
+- **接口名称**: `UpdateRoomSettings`
+- **描述**: 房主更改房间的设置参数
+- **调用方式**: SignalR Hub方法调用
+
+## 参数说明
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| roomID | string | 是 | 房间ID |
+| settings | object | 是 | 新的房间设置对象 |
+| operatorUID | string | 是 | 操作者UID（必须是房主） |
+
+### settings对象字段
+
+| 字段名 | 类型 | 必填 | 可选值 | 说明 |
+|--------|------|------|--------|------|
+| Region | string | 否 | 北京、上海、广州、洛阳、成都 | 游戏区域 |
+| Mode | string | 否 | 5v5、3v3、2v2、1v1 | 游戏模式 |
+| Player_Choose | bool | 否 | true、false | 是否允许玩家自由选择队伍 |
+| Team_Balance | bool | 否 | true、false | 是否启用队伍平衡 |
+
+### 参数示例
+
+```json
+{
+    "roomID": "072504001",
+    "settings": {
+        "Region": "上海",
+        "Mode": "3v3",
+        "Player_Choose": false,
+        "Team_Balance": true
+    },
+    "operatorUID": "08233-87956-48746-16119-67337"
+}
+```
+
+## 调用示例
+
+### 前端调用（JavaScript）
+
+```javascript
+// 更改房间设置
+const newSettings = {
+    Region: "上海",
+    Mode: "3v3",
+    Player_Choose: false,
+    Team_Balance: true
+};
+
+connection.invoke("UpdateRoomSettings", "072504001", newSettings, "08233-87956-48746-16119-67337")
+    .then(result => {
+        console.log("更改房间设置成功:", result);
+    })
+    .catch(err => {
+        console.error("更改房间设置失败:", err);
+    });
+```
+
+### 后端实现（C#）
+
+```csharp
+public class PlayerHubService : Hub
+{
+    public async Task<Room> UpdateRoomSettings(string roomID, RoomSettings newSettings, string operatorUID)
+    {
+        try
+        {
+            // 验证操作者身份
+            if (!ValidateUser(operatorUID))
+            {
+                throw new HubException("操作者身份验证失败");
+            }
+
+            // 检查房间是否存在
+            var room = await GetRoomFromDatabase(roomID);
+            if (room == null)
+            {
+                throw new HubException("房间不存在");
+            }
+
+            // 检查操作者是否为房主
+            if (room.Owner != operatorUID)
+            {
+                throw new HubException("只有房主可以更改房间设置");
+            }
+
+            // 检查房间状态
+            if (room.status != "等待中")
+            {
+                throw new HubException("房间状态不允许更改设置");
+            }
+
+            // 验证设置参数
+            ValidateRoomSettings(newSettings);
+
+            // 检查设置变更的兼容性
+            await ValidateSettingsCompatibility(room, newSettings);
+
+            // 记录修改前的设置
+            var oldSettings = room.Room_Setting.Clone();
+
+            // 更新房间设置
+            if (newSettings.Region != null)
+            {
+                room.Room_Setting.Region = newSettings.Region;
+            }
+            if (newSettings.Mode != null)
+            {
+                room.Room_Setting.Mode = newSettings.Mode;
+            }
+            if (newSettings.Player_Choose.HasValue)
+            {
+                room.Room_Setting.Player_Choose = newSettings.Player_Choose.Value;
+            }
+            if (newSettings.Team_Balance.HasValue)
+            {
+                room.Room_Setting.Team_Balance = newSettings.Team_Balance.Value;
+            }
+
+            // 更新数据库
+            await UpdateRoomInDatabase(room);
+
+            // 广播房间信息更新
+            await Clients.Group(roomID).SendAsync("TeamInfo", room);
+
+            // 广播设置更改事件
+            await Clients.Group(roomID).SendAsync("RoomSettingsChanged", new
+            {
+                roomID = roomID,
+                operatorUID = operatorUID,
+                operatorName = GetPlayerName(operatorUID),
+                oldSettings = oldSettings,
+                newSettings = room.Room_Setting,
+                changeTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+            });
+
+            // 向房主发送确认通知
+            var ownerConnectionId = await GetPlayerConnectionId(operatorUID);
+            if (!string.IsNullOrEmpty(ownerConnectionId))
+            {
+                await Clients.Client(ownerConnectionId).SendAsync("SettingsUpdateSuccess", new
+                {
+                    roomID = roomID,
+                    newSettings = room.Room_Setting,
+                    changeTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                });
+            }
+
+            return room;
+        }
+        catch (Exception ex)
+        {
+            throw new HubException($"更改房间设置失败: {ex.Message}");
+        }
+    }
+
+    private void ValidateRoomSettings(RoomSettings settings)
+    {
+        // 验证区域
+        if (settings.Region != null)
+        {
+            var validRegions = new[] { "北京", "上海", "广州", "洛阳", "成都" };
+            if (!validRegions.Contains(settings.Region))
+            {
+                throw new HubException("无效的游戏区域");
+            }
+        }
+
+        // 验证模式
+        if (settings.Mode != null)
+        {
+            var validModes = new[] { "5v5", "3v3", "2v2", "1v1" };
+            if (!validModes.Contains(settings.Mode))
+            {
+                throw new HubException("无效的游戏模式");
+            }
+        }
+    }
+
+    private async Task ValidateSettingsCompatibility(Room room, RoomSettings newSettings)
+    {
+        // 检查模式变更是否影响当前玩家数量
+        if (newSettings.Mode != null && newSettings.Mode != room.Room_Setting.Mode)
+        {
+            int maxPlayers = GetMaxPlayersForMode(newSettings.Mode);
+            if (room.Member.Count > maxPlayers)
+            {
+                throw new HubException($"当前玩家数量超过新模式 {newSettings.Mode} 的最大限制");
+            }
+        }
+
+        // 检查队伍平衡设置
+        if (newSettings.Team_Balance.HasValue && newSettings.Team_Balance.Value)
+        {
+            if (room.Member.Count % 2 != 0)
+            {
+                throw new HubException("启用队伍平衡时，玩家数量必须是偶数");
+            }
+        }
+    }
+
+    private int GetMaxPlayersForMode(string mode)
+    {
+        return mode switch
+        {
+            "5v5" => 10,
+            "3v3" => 6,
+            "2v2" => 4,
+            "1v1" => 2,
+            _ => 10
+        };
+    }
+}
+
+// RoomSettings类的扩展方法
+public static class RoomSettingsExtensions
+{
+    public static RoomSettings Clone(this RoomSettings settings)
+    {
+        return new RoomSettings
+        {
+            Region = settings.Region,
+            Mode = settings.Mode,
+            Player_Choose = settings.Player_Choose,
+            Team_Balance = settings.Team_Balance
+        };
+    }
+}
+```
+
+## 返回事件
+
+### TeamInfo 事件
+
+当房间设置更改成功后，服务器会向房间内所有玩家广播 `TeamInfo` 事件。
+
+#### 事件名称
+`TeamInfo`
+
+#### 事件数据
+```json
+{
+    "ID": "072504001",
+    "Name": "测试房间",
+    "Type": "1",
+    "MaxPlayer": 10,
+    "Password": "",
+    "Owner": "08233-87956-48746-16119-67337",
+    "Member": [
+        "08233-87956-48746-16119-67337",
+        "12345-67890-12345-67890-12345"
+    ],
+    "Watch": [],
+    "Ready": [],
+    "Game": {
+        "ID": "CutomMatch - 072504001",
+        "Map": "de_dust2",
+        "Mode": "竞技模式"
+    },
+    "Room_Setting": {
+        "Region": "上海",
+        "Mode": "3v3",
+        "Player_Choose": false,
+        "Team_Balance": true
+    },
+    "status": "等待中",
+    "CreateTime": "2025-07-04 10:00:00"
+}
+```
+
+### RoomSettingsChanged 事件
+
+当房间设置发生变化时，服务器会广播 `RoomSettingsChanged` 事件。
+
+#### 事件名称
+`RoomSettingsChanged`
+
+#### 事件数据
+```json
+{
+    "roomID": "072504001",
+    "operatorUID": "08233-87956-48746-16119-67337",
+    "operatorName": "房主",
+    "oldSettings": {
+        "Region": "北京",
+        "Mode": "5v5",
+        "Player_Choose": true,
+        "Team_Balance": false
+    },
+    "newSettings": {
+        "Region": "上海",
+        "Mode": "3v3",
+        "Player_Choose": false,
+        "Team_Balance": true
+    },
+    "changeTime": "2025-07-04 10:30:00"
+}
+```
+
+### SettingsUpdateSuccess 事件
+
+当房主成功更改设置时，服务器会向房主发送 `SettingsUpdateSuccess` 事件。
+
+#### 事件名称
+`SettingsUpdateSuccess`
+
+#### 事件数据
+```json
+{
+    "roomID": "072504001",
+    "newSettings": {
+        "Region": "上海",
+        "Mode": "3v3",
+        "Player_Choose": false,
+        "Team_Balance": true
+    },
+    "changeTime": "2025-07-04 10:30:00"
+}
+```
+
+### 前端监听示例
+
+```javascript
+// 监听房间信息更新
+connection.on("TeamInfo", (roomData) => {
+    console.log("房间信息更新:", roomData);
+    updateRoomUI(roomData);
+});
+
+// 监听房间设置变化事件
+connection.on("RoomSettingsChanged", (data) => {
+    console.log(`${data.operatorName} 更改了房间设置`);
+    showNotification(`${data.operatorName} 更改了房间设置`);
+    
+    // 显示设置变更详情
+    showSettingsChangeDetails(data.oldSettings, data.newSettings);
+    updateSettingsUI(data.newSettings);
+});
+
+// 监听设置更新成功事件（房主）
+connection.on("SettingsUpdateSuccess", (data) => {
+    console.log("房间设置更新成功");
+    showNotification("房间设置更新成功");
+    updateSettingsUI(data.newSettings);
+});
+```
+
+## 执行流程图
+
+
+<Mermaid
+  chart="
+graph TD
+    A[客户端调用UpdateRoomSettings] --> B[验证操作者身份]
+    B --> C{身份验证通过?}
+    C -->|否| D[返回错误]
+    C -->|是| E[检查房间是否存在]
+    E --> F{房间存在?}
+    F -->|否| G[返回房间不存在错误]
+    F -->|是| H[检查操作者是否为房主]
+    H --> I{是房主?}
+    I -->|否| J[返回权限错误]
+    I -->|是| K[检查房间状态]
+    K --> L{状态允许更改?}
+    L -->|否| M[返回状态错误]
+    L -->|是| N[验证设置参数]
+    N --> O{参数有效?}
+    O -->|否| P[返回参数错误]
+    O -->|是| Q[检查设置兼容性]
+    Q --> R{设置兼容?}
+    R -->|否| S[返回兼容性错误]
+    R -->|是| T[记录旧设置]
+    T --> U[更新房间设置]
+    U --> V[更新数据库]
+    V --> W[广播TeamInfo事件]
+    W --> X[广播RoomSettingsChanged事件]
+    X --> Y[发送SettingsUpdateSuccess事件]
+    Y --> Z[返回房间信息]
+    D --> AA[错误处理]
+    G --> AA
+    J --> AA
+    M --> AA
+    P --> AA
+    S --> AA
+    AA --> BB[返回错误信息]"
+/>
+
+
+
+## 错误处理
+
+### 常见错误码
+
+| 错误码 | 错误信息 | 处理方式 |
+|--------|----------|----------|
+| 1001 | 参数错误 | 检查参数是否为空或格式错误 |
+| 1002 | 房间不存在 | 检查房间ID是否正确 |
+| 1004 | 权限不足 | 只有房主可以更改设置 |
+| 1008 | 房间状态不允许操作 | 只有"等待中"状态允许更改 |
+| 1016 | 无效的游戏区域 | 检查Region参数是否在有效范围内 |
+| 1017 | 无效的游戏模式 | 检查Mode参数是否在有效范围内 |
+| 1018 | 设置兼容性错误 | 检查设置变更是否与当前状态兼容 |
+| 1009 | 网络连接异常 | 检查网络连接状态 |
+| 1010 | 服务器内部错误 | 联系技术支持 |
+
+### 错误响应示例
+
+```json
+{
+    "error": {
+        "code": 1018,
+        "message": "设置兼容性错误",
+        "details": "当前玩家数量超过新模式3v3的最大限制"
+    }
+}
+```
+
+## 特殊情况处理
+
+### 1. 模式变更限制
+
+当更改游戏模式时：
+
+- 检查当前玩家数量是否超过新模式的最大限制
+- 如果超过限制，拒绝更改并提示错误
+- 建议房主先减少玩家数量再更改模式
+
+### 2. 队伍平衡设置
+
+当启用队伍平衡时：
+
+- 检查玩家数量是否为偶数
+- 如果不是偶数，拒绝更改并提示错误
+- 建议房主调整玩家数量或禁用队伍平衡
+
+### 3. 玩家选择限制
+
+当禁用玩家自由选择时：
+
+- 玩家无法自行切换队伍
+- 只有房主可以调整玩家位置
+- 影响后续的玩家位置切换操作
+
+### 4. 区域变更影响
+
+当更改游戏区域时：
+
+- 可能影响游戏服务器的选择
+- 影响玩家的网络延迟
+- 建议在游戏开始前确定区域
+
+## 注意事项
+
+### 1. 权限控制
+- 严格限制只有房主可以更改设置
+- 防止恶意设置变更
+- 记录设置变更历史
+
+### 2. 兼容性检查
+- 验证设置变更的合理性
+- 检查与当前房间状态的兼容性
+- 提供详细的错误提示
+
+### 3. 用户体验
+- 提供设置变更的实时反馈
+- 显示变更前后的对比
+- 支持设置回滚功能
+
+### 4. 数据一致性
+- 设置变更立即生效
+- 确保所有玩家状态同步
+- 处理网络异常情况
+
+### 5. 性能考虑
+- 使用异步操作处理设置更新
+- 避免不必要的数据库查询
+- 优化设置验证逻辑
+
+## 测试用例
+
+### 正常情况测试
+
+```javascript
+// 测试用例1：更改游戏区域
+const regionSettings = { Region: "上海" };
+connection.invoke("UpdateRoomSettings", "072504001", regionSettings, "08233-87956-48746-16119-67337")
+    .then(room => {
+        assert(room.Room_Setting.Region === "上海");
+        console.log("测试通过：游戏区域更改成功");
+    });
+
+// 测试用例2：更改游戏模式
+const modeSettings = { Mode: "3v3" };
+connection.invoke("UpdateRoomSettings", "072504001", modeSettings, "08233-87956-48746-16119-67337")
+    .then(room => {
+        assert(room.Room_Setting.Mode === "3v3");
+        console.log("测试通过：游戏模式更改成功");
+    });
+```
+
+### 异常情况测试
+
+```javascript
+// 测试用例3：普通玩家尝试更改设置
+const testSettings = { Region: "上海" };
+connection.invoke("UpdateRoomSettings", "072504001", testSettings, "99999-99999-99999-99999-99999")
+    .then(() => {
+        console.error("测试失败：应该抛出错误");
+    })
+    .catch(error => {
+        assert(error.message.includes("只有房主可以更改房间设置"));
+        console.log("测试通过：权限不足被正确处理");
+    });
+
+// 测试用例4：无效的游戏区域
+const invalidRegionSettings = { Region: "火星" };
+connection.invoke("UpdateRoomSettings", "072504001", invalidRegionSettings, "08233-87956-48746-16119-67337")
+    .then(() => {
+        console.error("测试失败：应该抛出错误");
+    })
+    .catch(error => {
+        assert(error.message.includes("无效的游戏区域"));
+        console.log("测试通过：无效区域被正确处理");
+    });
+```
+
+## 相关接口
+
+- [加入房间](./join-room.mdx)
+- [离开房间](./leave-room.mdx)
+- [切换玩家位置](./switch-player-position.mdx)
+- [更改游戏设置](./update-game-settings.mdx)
+- [房间信息更新](./room-events.mdx) 

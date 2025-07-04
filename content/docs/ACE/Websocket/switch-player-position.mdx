@@ -1,0 +1,456 @@
+---
+title: "切换玩家位置"
+description: "SwitchPlayerPosition - 将成员切换至TeamA、TeamB或观战席位接口"
+---
+
+# 切换玩家位置接口
+
+## 接口信息
+
+- **接口名称**: `SwitchPlayerPosition`
+- **描述**: 将房间成员在TeamA、TeamB和观战席位之间切换
+- **调用方式**: SignalR Hub方法调用
+
+## 参数说明
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| roomID | string | 是 | 房间ID |
+| playerUID | string | 是 | 要切换位置的玩家UID |
+| targetPosition | string | 是 | 目标位置："TeamA"、"TeamB"、"Watch" |
+| operatorUID | string | 是 | 操作者UID（房主或玩家本人） |
+
+### 参数示例
+
+```json
+{
+    "roomID": "072504001",
+    "playerUID": "08233-87956-48746-16119-67337",
+    "targetPosition": "TeamA",
+    "operatorUID": "12345-67890-12345-67890-12345"
+}
+```
+
+## 调用示例
+
+### 前端调用（JavaScript）
+
+```javascript
+// 切换到TeamA
+connection.invoke("SwitchPlayerPosition", "072504001", "08233-87956-48746-16119-67337", "TeamA", "12345-67890-12345-67890-12345")
+    .then(result => {
+        console.log("切换位置成功:", result);
+    })
+    .catch(err => {
+        console.error("切换位置失败:", err);
+    });
+
+// 切换到观战席位
+connection.invoke("SwitchPlayerPosition", "072504001", "08233-87956-48746-16119-67337", "Watch", "08233-87956-48746-16119-67337")
+    .then(result => {
+        console.log("切换到观战席位成功:", result);
+    })
+    .catch(err => {
+        console.error("切换位置失败:", err);
+    });
+```
+
+### 后端实现（C#）
+
+```csharp
+public class PlayerHubService : Hub
+{
+    public async Task<Room> SwitchPlayerPosition(string roomID, string playerUID, string targetPosition, string operatorUID)
+    {
+        try
+        {
+            // 验证用户身份
+            if (!ValidateUser(operatorUID))
+            {
+                throw new HubException("操作者身份验证失败");
+            }
+
+            // 检查房间是否存在
+            var room = await GetRoomFromDatabase(roomID);
+            if (room == null)
+            {
+                throw new HubException("房间不存在");
+            }
+
+            // 检查房间状态
+            if (room.status != "等待中")
+            {
+                throw new HubException("房间状态不允许切换位置");
+            }
+
+            // 检查操作权限
+            if (room.Owner != operatorUID && playerUID != operatorUID)
+            {
+                throw new HubException("只有房主或玩家本人可以切换位置");
+            }
+
+            // 检查玩家是否在房间中
+            bool isInMember = room.Member.Contains(playerUID);
+            bool isInWatch = room.Watch.Contains(playerUID);
+            
+            if (!isInMember && !isInWatch)
+            {
+                throw new HubException("玩家不在房间中");
+            }
+
+            // 从准备列表中移除（切换位置时取消准备状态）
+            if (room.Ready.Contains(playerUID))
+            {
+                room.Ready.Remove(playerUID);
+            }
+
+            // 从当前位置移除
+            if (isInMember)
+            {
+                room.Member.Remove(playerUID);
+            }
+            if (isInWatch)
+            {
+                room.Watch.Remove(playerUID);
+            }
+
+            // 添加到目标位置
+            switch (targetPosition.ToUpper())
+            {
+                case "TEAMA":
+                case "TEAMB":
+                    // 检查房间设置是否允许玩家选择
+                    if (!room.Room_Setting.Player_Choose)
+                    {
+                        throw new HubException("房间设置不允许玩家自由选择队伍");
+                    }
+                    
+                    // 检查队伍平衡
+                    if (room.Room_Setting.Team_Balance)
+                    {
+                        int teamACount = GetTeamACount(room);
+                        int teamBCount = GetTeamBCount(room);
+                        
+                        if (targetPosition.ToUpper() == "TEAMA" && teamACount >= teamBCount + 1)
+                        {
+                            throw new HubException("队伍平衡设置不允许TeamA人数超过TeamB");
+                        }
+                        if (targetPosition.ToUpper() == "TEAMB" && teamBCount >= teamACount + 1)
+                        {
+                            throw new HubException("队伍平衡设置不允许TeamB人数超过TeamA");
+                        }
+                    }
+                    
+                    room.Member.Add(playerUID);
+                    break;
+                    
+                case "WATCH":
+                    room.Watch.Add(playerUID);
+                    break;
+                    
+                default:
+                    throw new HubException("无效的目标位置");
+            }
+
+            // 更新数据库
+            await UpdateRoomInDatabase(room);
+
+            // 广播房间信息更新
+            await Clients.Group(roomID).SendAsync("TeamInfo", room);
+
+            // 广播位置切换事件
+            await Clients.Group(roomID).SendAsync("PlayerPositionChanged", new
+            {
+                roomID = roomID,
+                playerUID = playerUID,
+                playerName = GetPlayerName(playerUID),
+                oldPosition = isInMember ? "Member" : "Watch",
+                newPosition = targetPosition,
+                operatorUID = operatorUID,
+                operatorName = GetPlayerName(operatorUID)
+            });
+
+            return room;
+        }
+        catch (Exception ex)
+        {
+            throw new HubException($"切换玩家位置失败: {ex.Message}");
+        }
+    }
+
+    private int GetTeamACount(Room room)
+    {
+        // 这里需要根据实际的队伍分配逻辑来计算TeamA的人数
+        // 假设Member列表的前半部分是TeamA
+        return room.Member.Count / 2;
+    }
+
+    private int GetTeamBCount(Room room)
+    {
+        // 这里需要根据实际的队伍分配逻辑来计算TeamB的人数
+        // 假设Member列表的后半部分是TeamB
+        return room.Member.Count - (room.Member.Count / 2);
+    }
+}
+```
+
+## 返回事件
+
+### TeamInfo 事件
+
+当玩家位置切换成功后，服务器会向房间内所有玩家广播 `TeamInfo` 事件。
+
+#### 事件名称
+`TeamInfo`
+
+#### 事件数据
+```json
+{
+    "ID": "072504001",
+    "Name": "测试房间",
+    "Type": "1",
+    "MaxPlayer": 10,
+    "Password": "",
+    "Owner": "08233-87956-48746-16119-67337",
+    "Member": [
+        "08233-87956-48746-16119-67337",
+        "12345-67890-12345-67890-12345"
+    ],
+    "Watch": ["98765-43210-98765-43210-98765"],
+    "Ready": [],
+    "Game": {
+        "ID": "CutomMatch - 072504001",
+        "Map": "de_dust2",
+        "Mode": "竞技模式"
+    },
+    "Room_Setting": {
+        "Region": "北京",
+        "Mode": "5v5",
+        "Player_Choose": true,
+        "Team_Balance": false
+    },
+    "status": "等待中",
+    "CreateTime": "2025-07-04 10:00:00"
+}
+```
+
+### PlayerPositionChanged 事件
+
+当玩家位置发生变化时，服务器会广播 `PlayerPositionChanged` 事件。
+
+#### 事件名称
+`PlayerPositionChanged`
+
+#### 事件数据
+```json
+{
+    "roomID": "072504001",
+    "playerUID": "08233-87956-48746-16119-67337",
+    "playerName": "切换的玩家",
+    "oldPosition": "Watch",
+    "newPosition": "TeamA",
+    "operatorUID": "12345-67890-12345-67890-12345",
+    "operatorName": "操作者"
+}
+```
+
+### 前端监听示例
+
+```javascript
+// 监听房间信息更新
+connection.on("TeamInfo", (roomData) => {
+    console.log("房间信息更新:", roomData);
+    updateRoomUI(roomData);
+});
+
+// 监听玩家位置变化
+connection.on("PlayerPositionChanged", (data) => {
+    console.log(`${data.playerName} 从 ${data.oldPosition} 切换到 ${data.newPosition}`);
+    showNotification(`${data.playerName} 切换到了 ${data.newPosition}`);
+    updatePlayerPositionUI(data);
+});
+```
+
+## 执行流程图
+
+<Mermaid
+  chart="
+graph TD
+        A[客户端调用SwitchPlayerPosition] --> B[验证操作者身份]
+    B --> C{身份验证通过?}
+    C -->|否| D[返回错误]
+    C -->|是| E[检查房间是否存在]
+    E --> F{房间存在?}
+    F -->|否| G[返回房间不存在错误]
+    F -->|是| H[检查房间状态]
+    H --> I{状态允许切换?}
+    I -->|否| J[返回状态错误]
+    I -->|是| K[检查操作权限]
+    K --> L{有权限?}
+    L -->|否| M[返回权限错误]
+    L -->|是| N[检查玩家是否在房间]
+    N --> O{玩家在房间?}
+    O -->|否| P[返回玩家不在房间错误]
+    O -->|是| Q[从准备列表移除]
+    Q --> R[从当前位置移除]
+    R --> S{目标位置是队伍?}
+    S -->|是| T{房间允许选择?}
+    T -->|否| U[返回不允许选择错误]
+    T -->|是| V{需要队伍平衡?}
+    V -->|是| W{平衡检查通过?}
+    W -->|否| X[返回平衡错误]
+    W -->|是| Y[添加到目标位置]
+    V -->|否| Y
+    S -->|否| Y
+    U --> Z[错误处理]
+    X --> Z
+    Y --> AA[更新数据库]
+    AA --> BB[广播TeamInfo事件]
+    BB --> CC[广播PlayerPositionChanged事件]
+    CC --> DD[返回房间信息]
+    D --> Z
+    G --> Z
+    J --> Z
+    M --> Z
+    P --> Z
+    Z --> EE[返回错误信息]"
+/>
+
+
+
+## 错误处理
+
+### 常见错误码
+
+| 错误码 | 错误信息 | 处理方式 |
+|--------|----------|----------|
+| 1001 | 参数错误 | 检查参数是否为空或格式错误 |
+| 1002 | 房间不存在 | 检查房间ID是否正确 |
+| 1004 | 权限不足 | 只有房主或玩家本人可以切换位置 |
+| 1006 | 玩家不在房间中 | 检查玩家是否真的在房间中 |
+| 1008 | 房间状态不允许操作 | 只有"等待中"状态允许切换 |
+| 1011 | 房间设置不允许选择 | 检查Player_Choose设置 |
+| 1012 | 队伍平衡限制 | 检查Team_Balance设置 |
+| 1009 | 网络连接异常 | 检查网络连接状态 |
+| 1010 | 服务器内部错误 | 联系技术支持 |
+
+### 错误响应示例
+
+```json
+{
+    "error": {
+        "code": 1004,
+        "message": "权限不足",
+        "details": "只有房主或玩家本人可以切换位置"
+    }
+}
+```
+
+## 特殊情况处理
+
+### 1. 队伍平衡设置
+
+当房间设置了队伍平衡时：
+
+- TeamA和TeamB的人数差不能超过1
+- 系统会自动检查并阻止不平衡的切换
+
+### 2. 玩家选择限制
+
+当房间不允许玩家自由选择时：
+
+- 只有房主可以切换玩家位置
+- 普通玩家无法自行切换位置
+
+### 3. 准备状态处理
+
+切换位置时：
+
+- 自动取消玩家的准备状态
+- 从Ready列表中移除
+
+### 4. 房主特殊权限
+
+房主可以：
+
+- 切换任何玩家的位置
+- 不受队伍平衡限制（如果设置允许）
+- 强制调整队伍配置
+
+## 注意事项
+
+### 1. 权限控制
+- 只有房主或玩家本人可以切换位置
+- 房主拥有最高权限，可以切换任何玩家
+
+### 2. 房间设置影响
+- Player_Choose设置影响玩家是否可以自由选择
+- Team_Balance设置影响队伍人数平衡
+
+### 3. 状态同步
+- 切换位置后立即更新数据库
+- 确保所有房间成员收到更新通知
+- 处理并发切换请求
+
+### 4. 用户体验
+- 提供清晰的位置切换反馈
+- 显示操作者和被操作者信息
+- 处理权限不足的提示
+
+### 5. 数据一致性
+- 确保位置切换的原子性
+- 处理网络异常情况
+- 避免数据不一致
+
+## 测试用例
+
+### 正常情况测试
+
+```javascript
+// 测试用例1：房主切换玩家位置
+connection.invoke("SwitchPlayerPosition", "072504001", "12345-67890-12345-67890-12345", "TeamA", "08233-87956-48746-16119-67337")
+    .then(room => {
+        assert(room.Member.includes("12345-67890-12345-67890-12345"));
+        console.log("测试通过：房主成功切换玩家位置");
+    });
+
+// 测试用例2：玩家自己切换到观战席位
+connection.invoke("SwitchPlayerPosition", "072504001", "12345-67890-12345-67890-12345", "Watch", "12345-67890-12345-67890-12345")
+    .then(room => {
+        assert(room.Watch.includes("12345-67890-12345-67890-12345"));
+        console.log("测试通过：玩家成功切换到观战席位");
+    });
+```
+
+### 异常情况测试
+
+```javascript
+// 测试用例3：权限不足
+connection.invoke("SwitchPlayerPosition", "072504001", "12345-67890-12345-67890-12345", "TeamA", "99999-99999-99999-99999-99999")
+    .then(() => {
+        console.error("测试失败：应该抛出错误");
+    })
+    .catch(error => {
+        assert(error.message.includes("权限不足"));
+        console.log("测试通过：权限不足被正确处理");
+    });
+
+// 测试用例4：房间不允许选择
+// 假设房间设置了Player_Choose为false
+connection.invoke("SwitchPlayerPosition", "072504001", "12345-67890-12345-67890-12345", "TeamA", "12345-67890-12345-67890-12345")
+    .then(() => {
+        console.error("测试失败：应该抛出错误");
+    })
+    .catch(error => {
+        assert(error.message.includes("房间设置不允许玩家自由选择"));
+        console.log("测试通过：房间设置限制被正确处理");
+    });
+```
+
+## 相关接口
+
+- [加入房间](./join-room.mdx)
+- [离开房间](./leave-room.mdx)
+- [踢出玩家](./kick-player.mdx)
+- [更改房间设置](./update-room-settings.mdx)
+- [玩家状态变化](./player-events.mdx) 

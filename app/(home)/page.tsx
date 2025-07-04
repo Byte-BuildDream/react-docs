@@ -61,9 +61,6 @@ function ElegantShape({
         }}
         className="relative"
       >
-
-
-        
         <div
           className={cn(
             "absolute inset-0 rounded-full",
@@ -80,15 +77,11 @@ function ElegantShape({
   )
 }
 
-export default function HeroGeometric({
-  badge = "Hero UI",
-  title1 = "React基础",
-  title2 = "Build Dream",
-}: {
-  badge?: string
-  title1?: string
-  title2?: string
-}) {
+export default function Page() {
+  const badge = "Hero UI"
+  const title1 = "React基础"
+  const title2 = "Build Dream"
+  
   const fadeUpVariants = {
     hidden: { opacity: 0, y: 30 },
     visible: (i: number) => ({

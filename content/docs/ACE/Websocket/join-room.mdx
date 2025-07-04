@@ -1,0 +1,360 @@
+---
+title: "加入房间"
+description: "JoinRoom - 加入自定义竞技房间接口"
+---
+
+# 加入房间接口
+
+## 接口信息
+
+- **接口名称**: `JoinRoom`
+- **描述**: 用于加入一个已存在的自定义竞技房间
+- **调用方式**: SignalR Hub方法调用
+
+## 参数说明
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| roomID | string | 是 | 要加入的房间ID |
+| playerUID | string | 是 | 玩家的UID |
+| password | string | 否 | 房间密码（如果房间设置了密码） |
+
+### 参数示例
+
+```json
+{
+    "roomID": "072504001",
+    "playerUID": "08233-87956-48746-16119-67337",
+    "password": "123456"
+}
+```
+
+## 调用示例
+
+### 前端调用（JavaScript）
+
+```javascript
+// 加入房间（无密码）
+connection.invoke("JoinRoom", "072504001", "08233-87956-48746-16119-67337")
+    .then(result => {
+        console.log("加入房间成功:", result);
+    })
+    .catch(err => {
+        console.error("加入房间失败:", err);
+    });
+
+// 加入房间（有密码）
+connection.invoke("JoinRoom", "072504001", "08233-87956-48746-16119-67337", "123456")
+    .then(result => {
+        console.log("加入房间成功:", result);
+    })
+    .catch(err => {
+        console.error("加入房间失败:", err);
+    });
+```
+
+### 后端实现（C#）
+
+```csharp
+public class PlayerHubService : Hub
+{
+    public async Task<Room> JoinRoom(string roomID, string playerUID, string password = null)
+    {
+        try
+        {
+            // 验证用户身份
+            if (!ValidateUser(playerUID))
+            {
+                throw new HubException("用户身份验证失败");
+            }
+
+            // 检查房间是否存在
+            var room = await GetRoomFromDatabase(roomID);
+            if (room == null)
+            {
+                throw new HubException("房间不存在");
+            }
+
+            // 检查房间状态
+            if (room.status != "等待中")
+            {
+                throw new HubException("房间状态不允许加入");
+            }
+
+            // 检查房间是否已满
+            if (room.Member.Count >= room.MaxPlayer)
+            {
+                throw new HubException("房间已满");
+            }
+
+            // 检查玩家是否已在房间中
+            if (room.Member.Contains(playerUID) || room.Watch.Contains(playerUID))
+            {
+                throw new HubException("玩家已在房间中");
+            }
+
+            // 检查房间密码
+            if (!string.IsNullOrEmpty(room.Password))
+            {
+                if (string.IsNullOrEmpty(password))
+                {
+                    throw new HubException("房间需要密码");
+                }
+                
+                if (!VerifyPassword(room.Password, password))
+                {
+                    throw new HubException("房间密码错误");
+                }
+            }
+
+            // 将玩家加入房间
+            room.Member.Add(playerUID);
+
+            // 更新数据库
+            await UpdateRoomInDatabase(room);
+
+            // 将玩家加入房间组
+            await Groups.AddToGroupAsync(Context.ConnectionId, roomID);
+
+            // 广播房间信息更新
+            await Clients.Group(roomID).SendAsync("TeamInfo", room);
+
+            // 广播玩家加入事件
+            await Clients.Group(roomID).SendAsync("PlayerJoined", new
+            {
+                roomID = roomID,
+                playerUID = playerUID,
+                playerName = GetPlayerName(playerUID)
+            });
+
+            return room;
+        }
+        catch (Exception ex)
+        {
+            throw new HubException($"加入房间失败: {ex.Message}");
+        }
+    }
+}
+```
+
+## 返回事件
+
+### TeamInfo 事件
+
+当玩家成功加入房间后，服务器会向房间内所有玩家广播 `TeamInfo` 事件。
+
+#### 事件名称
+`TeamInfo`
+
+#### 事件数据
+```json
+{
+    "ID": "072504001",
+    "Name": "测试房间",
+    "Type": "1",
+    "MaxPlayer": 10,
+    "Password": "",
+    "Owner": "08233-87956-48746-16119-67337",
+    "Member": [
+        "08233-87956-48746-16119-67337",
+        "12345-67890-12345-67890-12345"
+    ],
+    "Watch": [],
+    "Ready": [],
+    "Game": {
+        "ID": "CutomMatch - 072504001",
+        "Map": "de_dust2",
+        "Mode": "竞技模式"
+    },
+    "Room_Setting": {
+        "Region": "北京",
+        "Mode": "5v5",
+        "Player_Choose": true,
+        "Team_Balance": false
+    },
+    "status": "等待中",
+    "CreateTime": "2025-07-04 10:00:00"
+}
+```
+
+### PlayerJoined 事件
+
+当有新玩家加入房间时，服务器会广播 `PlayerJoined` 事件。
+
+#### 事件名称
+`PlayerJoined`
+
+#### 事件数据
+```json
+{
+    "roomID": "072504001",
+    "playerUID": "12345-67890-12345-67890-12345",
+    "playerName": "新玩家"
+}
+```
+
+### 前端监听示例
+
+```javascript
+// 监听房间信息更新
+connection.on("TeamInfo", (roomData) => {
+    console.log("房间信息更新:", roomData);
+    updateRoomUI(roomData);
+});
+
+// 监听玩家加入事件
+connection.on("PlayerJoined", (data) => {
+    console.log(`玩家 ${data.playerName} 加入了房间`);
+    showNotification(`${data.playerName} 加入了房间`);
+});
+```
+
+## 执行流程图
+
+<Mermaid
+  chart="
+graph TD
+    A[客户端调用JoinRoom] --> B[验证用户身份]
+    B --> C{身份验证通过?}
+    C -->|否| D[返回错误]
+    C -->|是| E[检查房间是否存在]
+    E --> F{房间存在?}
+    F -->|否| G[返回房间不存在错误]
+    F -->|是| H[检查房间状态]
+    H --> I{状态允许加入?}
+    I -->|否| J[返回状态错误]
+    I -->|是| K[检查房间是否已满]
+    K --> L{房间未满?}
+    L -->|否| M[返回房间已满错误]
+    L -->|是| N[检查玩家是否已在房间]
+    N --> O{玩家不在房间?}
+    O -->|否| P[返回已在房间错误]
+    O -->|是| Q[检查房间密码]
+    Q --> R{需要密码?}
+    R -->|是| S{密码正确?}
+    S -->|否| T[返回密码错误]
+    S -->|是| U[加入房间]
+    R -->|否| U
+    U --> V[更新数据库]
+    V --> W[加入房间组]
+    W --> X[广播TeamInfo事件]
+    X --> Y[广播PlayerJoined事件]
+    Y --> Z[返回房间信息]
+    
+    D --> AA[错误处理]
+    G --> AA
+    J --> AA
+    M --> AA
+    P --> AA
+    T --> AA
+    AA --> BB[返回错误信息]"
+/>
+
+
+
+## 错误处理
+
+### 常见错误码
+
+| 错误码 | 错误信息 | 处理方式 |
+|--------|----------|----------|
+| 1001 | 参数错误 | 检查roomID和playerUID是否为空 |
+| 1002 | 房间不存在 | 检查房间ID是否正确 |
+| 1003 | 房间已满 | 等待其他玩家离开或寻找其他房间 |
+| 1004 | 权限不足 | 验证用户身份和权限 |
+| 1005 | 玩家已在房间中 | 检查用户是否已在其他房间 |
+| 1006 | 玩家不在房间中 | 重新加入房间 |
+| 1007 | 房间密码错误 | 检查密码是否正确 |
+| 1008 | 房间状态不允许操作 | 等待房间状态变为"等待中" |
+| 1009 | 网络连接异常 | 检查网络连接状态 |
+| 1010 | 服务器内部错误 | 联系技术支持 |
+
+### 错误响应示例
+
+```json
+{
+    "error": {
+        "code": 1007,
+        "message": "房间密码错误",
+        "details": "提供的密码与房间设置的密码不匹配"
+    }
+}
+```
+
+## 注意事项
+
+### 1. 密码验证
+- 密码在传输前必须加密
+- 支持数字和字母组合
+- 密码验证失败后可以重试
+
+### 2. 房间状态检查
+- 只有"等待中"状态的房间允许加入
+- "准备中"和"游戏中"状态的房间不允许加入
+
+### 3. 玩家数量限制
+- 检查房间当前成员数量是否达到最大限制
+- 包括房主在内的所有玩家都计入限制
+
+### 4. 重复加入检查
+- 检查玩家是否已在当前房间
+- 检查玩家是否在其他房间中
+
+### 5. 权限控制
+- 只有已认证的用户才能加入房间
+- 私人房间可能需要额外的权限验证
+
+### 6. 数据同步
+- 加入成功后立即更新房间信息
+- 确保所有房间成员收到更新通知
+
+## 测试用例
+
+### 正常情况测试
+
+```javascript
+// 测试用例1：正常加入房间（无密码）
+connection.invoke("JoinRoom", "072504001", "12345-67890-12345-67890-12345")
+    .then(room => {
+        assert(room.Member.includes("12345-67890-12345-67890-12345"));
+        console.log("测试通过：成功加入房间");
+    });
+
+// 测试用例2：正常加入房间（有密码）
+connection.invoke("JoinRoom", "072504001", "12345-67890-12345-67890-12345", "123456")
+    .then(room => {
+        assert(room.Member.includes("12345-67890-12345-67890-12345"));
+        console.log("测试通过：成功加入有密码的房间");
+    });
+```
+
+### 异常情况测试
+
+```javascript
+// 测试用例3：房间不存在
+connection.invoke("JoinRoom", "999999999", "12345-67890-12345-67890-12345")
+    .then(() => {
+        console.error("测试失败：应该抛出错误");
+    })
+    .catch(error => {
+        assert(error.message.includes("房间不存在"));
+        console.log("测试通过：房间不存在被正确处理");
+    });
+
+// 测试用例4：密码错误
+connection.invoke("JoinRoom", "072504001", "12345-67890-12345-67890-12345", "wrongpassword")
+    .then(() => {
+        console.error("测试失败：应该抛出错误");
+    })
+    .catch(error => {
+        assert(error.message.includes("房间密码错误"));
+        console.log("测试通过：密码错误被正确处理");
+    });
+```
+
+## 相关接口
+
+- [创建房间](./create-room.mdx)
+- [离开房间](./leave-room.mdx)
+- [踢出玩家](./kick-player.mdx)
+- [房间信息更新](./room-events.mdx) 

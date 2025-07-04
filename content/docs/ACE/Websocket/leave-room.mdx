@@ -1,0 +1,406 @@
+---
+title: "离开房间"
+description: "LeaveRoom - 离开自定义竞技房间接口"
+---
+
+# 离开房间接口
+
+## 接口信息
+
+- **接口名称**: `LeaveRoom`
+- **描述**: 用于离开当前所在的房间
+- **调用方式**: SignalR Hub方法调用
+
+## 参数说明
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| roomID | string | 是 | 要离开的房间ID |
+| playerUID | string | 是 | 玩家的UID |
+
+### 参数示例
+
+```json
+{
+    "roomID": "072504001",
+    "playerUID": "08233-87956-48746-16119-67337"
+}
+```
+
+## 调用示例
+
+### 前端调用（JavaScript）
+
+```javascript
+// 离开房间
+connection.invoke("LeaveRoom", "072504001", "08233-87956-48746-16119-67337")
+    .then(result => {
+        console.log("离开房间成功:", result);
+    })
+    .catch(err => {
+        console.error("离开房间失败:", err);
+    });
+```
+
+### 后端实现（C#）
+
+```csharp
+public class PlayerHubService : Hub
+{
+    public async Task<bool> LeaveRoom(string roomID, string playerUID)
+    {
+        try
+        {
+            // 验证用户身份
+            if (!ValidateUser(playerUID))
+            {
+                throw new HubException("用户身份验证失败");
+            }
+
+            // 检查房间是否存在
+            var room = await GetRoomFromDatabase(roomID);
+            if (room == null)
+            {
+                throw new HubException("房间不存在");
+            }
+
+            // 检查玩家是否在房间中
+            bool isInMember = room.Member.Contains(playerUID);
+            bool isInWatch = room.Watch.Contains(playerUID);
+            
+            if (!isInMember && !isInWatch)
+            {
+                throw new HubException("玩家不在房间中");
+            }
+
+            // 从准备列表中移除
+            if (room.Ready.Contains(playerUID))
+            {
+                room.Ready.Remove(playerUID);
+            }
+
+            // 从成员列表中移除
+            if (isInMember)
+            {
+                room.Member.Remove(playerUID);
+            }
+
+            // 从观战列表中移除
+            if (isInWatch)
+            {
+                room.Watch.Remove(playerUID);
+            }
+
+            // 如果房主离开房间
+            if (room.Owner == playerUID)
+            {
+                // 如果房间还有其他成员，转让房主权限
+                if (room.Member.Count > 0)
+                {
+                    room.Owner = room.Member[0]; // 转让给第一个成员
+                }
+                else
+                {
+                    // 如果房间没有成员了，删除房间
+                    await DeleteRoomFromDatabase(roomID);
+                    
+                    // 广播房间删除事件
+                    await Clients.Group(roomID).SendAsync("RoomDeleted", roomID);
+                    
+                    // 从房间组中移除所有连接
+                    await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomID);
+                    
+                    return true;
+                }
+            }
+
+            // 更新数据库
+            await UpdateRoomInDatabase(room);
+
+            // 从房间组中移除当前连接
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomID);
+
+            // 广播房间信息更新
+            await Clients.Group(roomID).SendAsync("TeamInfo", room);
+
+            // 广播玩家离开事件
+            await Clients.Group(roomID).SendAsync("PlayerLeft", new
+            {
+                roomID = roomID,
+                playerUID = playerUID,
+                playerName = GetPlayerName(playerUID),
+                isOwner = room.Owner == playerUID
+            });
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            throw new HubException($"离开房间失败: {ex.Message}");
+        }
+    }
+}
+```
+
+## 返回事件
+
+### TeamInfo 事件
+
+当玩家成功离开房间后，服务器会向房间内剩余玩家广播 `TeamInfo` 事件。
+
+#### 事件名称
+`TeamInfo`
+
+#### 事件数据
+```json
+{
+    "ID": "072504001",
+    "Name": "测试房间",
+    "Type": "1",
+    "MaxPlayer": 10,
+    "Password": "",
+    "Owner": "12345-67890-12345-67890-12345",
+    "Member": ["12345-67890-12345-67890-12345"],
+    "Watch": [],
+    "Ready": [],
+    "Game": {
+        "ID": "CutomMatch - 072504001",
+        "Map": "de_dust2",
+        "Mode": "竞技模式"
+    },
+    "Room_Setting": {
+        "Region": "北京",
+        "Mode": "5v5",
+        "Player_Choose": true,
+        "Team_Balance": false
+    },
+    "status": "等待中",
+    "CreateTime": "2025-07-04 10:00:00"
+}
+```
+
+### PlayerLeft 事件
+
+当有玩家离开房间时，服务器会广播 `PlayerLeft` 事件。
+
+#### 事件名称
+`PlayerLeft`
+
+#### 事件数据
+```json
+{
+    "roomID": "072504001",
+    "playerUID": "08233-87956-48746-16119-67337",
+    "playerName": "离开的玩家",
+    "isOwner": false
+}
+```
+
+### RoomDeleted 事件
+
+当房主离开且房间没有其他成员时，服务器会广播 `RoomDeleted` 事件。
+
+#### 事件名称
+`RoomDeleted`
+
+#### 事件数据
+```json
+{
+    "roomID": "072504001"
+}
+```
+
+### 前端监听示例
+
+```javascript
+// 监听房间信息更新
+connection.on("TeamInfo", (roomData) => {
+    console.log("房间信息更新:", roomData);
+    updateRoomUI(roomData);
+});
+
+// 监听玩家离开事件
+connection.on("PlayerLeft", (data) => {
+    console.log(`玩家 ${data.playerName} 离开了房间`);
+    if (data.isOwner) {
+        showNotification(`房主 ${data.playerName} 离开了房间，房主权限已转让`);
+    } else {
+        showNotification(`${data.playerName} 离开了房间`);
+    }
+});
+
+// 监听房间删除事件
+connection.on("RoomDeleted", (roomID) => {
+    console.log(`房间 ${roomID} 已被删除`);
+    showNotification("房间已被删除");
+    // 跳转到房间列表页面
+    navigateToRoomList();
+});
+```
+
+## 执行流程图
+
+
+<Mermaid
+  chart="
+graph TD
+        A[客户端调用LeaveRoom] --> B[验证用户身份]
+    B --> C{身份验证通过?}
+    C -->|否| D[返回错误]
+    C -->|是| E[检查房间是否存在]
+    E --> F{房间存在?}
+    F -->|否| G[返回房间不存在错误]
+    F -->|是| H[检查玩家是否在房间]
+    H --> I{玩家在房间?}
+    I -->|否| J[返回玩家不在房间错误]
+    I -->|是| K[从准备列表移除]
+    K --> L[从成员/观战列表移除]
+    L --> M{是房主离开?}
+    M -->|是| N{房间还有其他成员?}
+    N -->|是| O[转让房主权限]
+    N -->|否| P[删除房间]
+    P --> Q[广播RoomDeleted事件]
+    Q --> R[从房间组移除]
+    R --> S[返回成功]
+    M -->|否| T[更新数据库]
+    O --> T
+    T --> U[从房间组移除]
+    U --> V[广播TeamInfo事件]
+    V --> W[广播PlayerLeft事件]
+    W --> X[返回成功]
+    
+    D --> Y[错误处理]
+    G --> Y
+    J --> Y
+    Y --> Z[返回错误信息]"
+/>
+
+
+## 错误处理
+
+### 常见错误码
+
+| 错误码 | 错误信息 | 处理方式 |
+|--------|----------|----------|
+| 1001 | 参数错误 | 检查roomID和playerUID是否为空 |
+| 1002 | 房间不存在 | 检查房间ID是否正确 |
+| 1004 | 权限不足 | 验证用户身份和权限 |
+| 1006 | 玩家不在房间中 | 检查用户是否真的在房间中 |
+| 1008 | 房间状态不允许操作 | 检查房间状态是否允许离开 |
+| 1009 | 网络连接异常 | 检查网络连接状态 |
+| 1010 | 服务器内部错误 | 联系技术支持 |
+
+### 错误响应示例
+
+```json
+{
+    "error": {
+        "code": 1006,
+        "message": "玩家不在房间中",
+        "details": "指定的玩家不在该房间的成员或观战列表中"
+    }
+}
+```
+
+## 特殊情况处理
+
+### 1. 房主离开房间
+
+当房主离开房间时，系统会自动处理房主权限转让：
+
+- 如果房间还有其他成员，房主权限会转让给第一个成员
+- 如果房间没有其他成员，房间会被删除
+
+### 2. 房间删除
+
+当房间被删除时：
+
+- 所有房间成员会收到 `RoomDeleted` 事件
+- 房间数据会从数据库中删除
+- 所有连接会从房间组中移除
+
+### 3. 连接断开
+
+当玩家连接意外断开时：
+
+- 系统会自动检测连接断开
+- 自动执行离开房间逻辑
+- 其他玩家会收到相应的通知
+
+## 注意事项
+
+### 1. 权限控制
+- 任何房间成员都可以主动离开房间
+- 房主离开不会影响其他玩家的游戏体验
+
+### 2. 数据一致性
+- 离开房间后立即更新数据库
+- 确保所有房间成员收到更新通知
+- 处理并发离开请求
+
+### 3. 状态同步
+- 离开房间后清除本地房间状态
+- 更新UI显示
+- 处理房间删除情况
+
+### 4. 性能考虑
+- 使用异步操作处理数据库更新
+- 批量处理多个玩家的离开请求
+- 避免不必要的数据库查询
+
+### 5. 用户体验
+- 提供清晰的离开确认提示
+- 显示房主权限转让通知
+- 处理房间删除后的页面跳转
+
+## 测试用例
+
+### 正常情况测试
+
+```javascript
+// 测试用例1：普通玩家离开房间
+connection.invoke("LeaveRoom", "072504001", "12345-67890-12345-67890-12345")
+    .then(result => {
+        assert(result === true);
+        console.log("测试通过：普通玩家成功离开房间");
+    });
+
+// 测试用例2：房主离开房间（有其他成员）
+connection.invoke("LeaveRoom", "072504001", "08233-87956-48746-16119-67337")
+    .then(result => {
+        assert(result === true);
+        console.log("测试通过：房主成功离开房间，权限已转让");
+    });
+```
+
+### 异常情况测试
+
+```javascript
+// 测试用例3：玩家不在房间中
+connection.invoke("LeaveRoom", "072504001", "99999-99999-99999-99999-99999")
+    .then(() => {
+        console.error("测试失败：应该抛出错误");
+    })
+    .catch(error => {
+        assert(error.message.includes("玩家不在房间中"));
+        console.log("测试通过：玩家不在房间被正确处理");
+    });
+
+// 测试用例4：房间不存在
+connection.invoke("LeaveRoom", "999999999", "12345-67890-12345-67890-12345")
+    .then(() => {
+        console.error("测试失败：应该抛出错误");
+    })
+    .catch(error => {
+        assert(error.message.includes("房间不存在"));
+        console.log("测试通过：房间不存在被正确处理");
+    });
+```
+
+## 相关接口
+
+- [创建房间](./create-room.mdx)
+- [加入房间](./join-room.mdx)
+- [踢出玩家](./kick-player.mdx)
+- [转让房主权限](./transfer-ownership.mdx)
+- [房间信息更新](./room-events.mdx) 
