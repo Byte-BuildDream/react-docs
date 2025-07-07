@@ -15,13 +15,13 @@ description: "CreateRoom - 创建自定义竞技房间接口"
 
 | 参数名 | 类型 | 必填 | 默认值 | 说明 |
 |--------|------|------|--------|------|
-| creatorUID | string | 是 | - | 创建者的UID |
+| CreateUID | string | 是 | - | 创建者的UID |
 
 ### 参数示例
 
 ```json
 {
-    "creatorUID": "08233-87956-48746-16119-67337"
+    "CreateUID": "08233-87956-48746-16119-67337"
 }
 ```
 
@@ -30,19 +30,40 @@ description: "CreateRoom - 创建自定义竞技房间接口"
 ### 前端调用（JavaScript）
 
 ```javascript
-// 使用SignalR客户端调用
-const connection = new signalR.HubConnectionBuilder()
-    .withUrl("https://localhost:5001/PlayerHubService")
-    .build();
+// 引入全局Websocket上下文、监听器
+import { useUtilsService, useUtilsServiceContext } from "@/lib/hub";
 
-// 调用创建房间接口
-connection.invoke("CreateRoom", "08233-87956-48746-16119-67337")
-    .then(result => {
-        console.log("房间创建成功:", result);
-    })
-    .catch(err => {
-        console.error("房间创建失败:", err);
+export default function SomePage() {
+    // 声明方法：请求，Websocekt连接状态值：连接状态、是否连接
+    const { invoke, connectionState, isConnected } = useUtilsServiceContext(); 
+    const [Room, SeRoom] = useState<Room>();
+
+    
+    // 创建房间函数示例：包含获取当前用户UID + 请求后端接口
+    const SomeFunction = async () => {
+        // 获取当前用户的UID
+        const UID = await GetSelfUID();
+        // 调用创建房间接口
+        invoke("CreateRoom", UID)
+            .then(result => {
+                console.log("房间创建成功:", result);
+            })
+            .catch(err => {
+                console.error("房间创建失败:", err);
+        });
+    }
+
+    // 监听后端Event事件返回
+    // 监听房间信息更新
+    useUtilsService("RoomInfo", (RoomData:Room) => {
+        console.log("收到房间信息更新:", roomData);
+        // 更新至房间状态中，靠状态更新UID
+        SetRoom(roomData);
     });
+
+}
+
+
 ```
 
 ### 后端实现（C#）
@@ -96,7 +117,7 @@ public class PlayerHubService : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, room.ID);
 
             // 广播房间创建事件
-            await Clients.All.SendAsync("RoomCreated", room);
+            await Clients.All.SendAsync("RoomInfo", room);
 
             return room;
         }
@@ -110,12 +131,12 @@ public class PlayerHubService : Hub
 
 ## 返回事件
 
-### TeamInfo 事件
+### RoomInfo 事件
 
-当房间创建成功后，服务器会向所有客户端广播 `TeamInfo` 事件，包含完整的房间信息。
+当房间创建成功后，服务器会向所有客户端广播 `RoomInfo` 事件，包含完整的房间信息。
 
 #### 事件名称
-`TeamInfo`
+`RoomInfo`
 
 #### 事件数据
 ```json
@@ -149,10 +170,10 @@ public class PlayerHubService : Hub
 
 ```javascript
 // 监听房间信息更新
-connection.on("TeamInfo", (roomData) => {
-    console.log("收到房间信息更新:", roomData);
-    // 更新UI显示
-    updateRoomUI(roomData);
+useUtilsService("RoomInfo", (RoomData:Room) => {
+        console.log("收到房间信息更新:", roomData);
+        // 更新至房间状态中，靠状态更新UID
+        SetRoom(roomData);
 });
 ```
 
