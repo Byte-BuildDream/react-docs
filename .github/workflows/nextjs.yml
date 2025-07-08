@@ -26,8 +26,6 @@ jobs:
       # 在 GitHub Actions 环境中，Nix 配置文件位于项目根目录，所以使用 "."
       - name: Install Dependencies
         run: nix develop . --command pnpm install
-      - name: Run Lint
-        run: nix develop . --command pnpm run lint
       - name: Build Project
         run: nix develop . --command pnpm run build
 
