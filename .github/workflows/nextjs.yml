@@ -1,0 +1,55 @@
+# .github/workflows/ci-cd.yml
+
+# 工作流名称
+name: Deploy Next.js to Server
+
+# 触发条件：当代码被推送到 master 分支时运行
+on:
+  push:
+    branches:
+      - master  # <-- 这里已修改
+
+jobs:
+  # 第一个任务：构建和测试
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+      - name: Install Dependencies
+        run: nix develop /home/bytedream/dev --command pnpm install
+      - name: Run Lint
+        run: nix develop /home/bytedream/dev --command pnpm run lint
+      - name: Build Project
+        run: nix develop /home/bytedream/dev --command pnpm run build
+
+  # 第二个任务：部署到服务器
+  deploy:
+    needs: build_and_test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /home/bytedream/react-docs
+            echo "Pulling latest code from master branch..."
+            git pull origin master  # <-- 建议这里也同步修改
+            echo "Installing dependencies..."
+            /nix/var/nix/profiles/default/bin/nix develop /home/bytedream/dev --command pnpm install
+            echo "Building application for production..."
+            /nix/var/nix/profiles/default/bin/nix develop /home/bytedream/dev --command pnpm run build
+            echo "Restarting systemd service..."
+            sudo systemctl restart your-service-name.service
+            echo "Deployment successful!"
