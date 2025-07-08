@@ -57,6 +57,6 @@ jobs:
             
             # 3. 将 'your-service-name.service' 修改为您的真实服务名
             echo "Restarting systemd service..."
-            sudo systemctl restart csgo-cms-next.service
+            sudo systemctl restart csgo-cms.service
             
             echo "Deployment successful!"
