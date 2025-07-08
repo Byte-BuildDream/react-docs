@@ -1,3 +1,8 @@
+# 项目文档
+
+# 注意
+现在对项目文档操作提交到github时会进行自动编译NextApp发布部署到服务器http://test.btyedream.com:11446/，在更改提交时完成提交时需确保Github action 工作成功。
+
 # react-docs
 
 This is a Next.js application generated with
