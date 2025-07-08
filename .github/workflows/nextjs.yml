@@ -1,16 +1,13 @@
 # .github/workflows/ci-cd.yml
 
-# 工作流名称
 name: Deploy Next.js to Server
 
-# 触发条件：当代码被推送到 master 分支时运行
 on:
   push:
     branches:
-      - master  # <-- 这里已修改
+      - master
 
 jobs:
-  # 第一个任务：构建和测试
   build_and_test:
     runs-on: ubuntu-latest
     steps:
@@ -24,14 +21,16 @@ jobs:
         uses: pnpm/action-setup@v3
         with:
           version: 8
+      
+      # --- 修正之处 ---
+      # 在 GitHub Actions 环境中，Nix 配置文件位于项目根目录，所以使用 "."
       - name: Install Dependencies
-        run: nix develop /home/bytedream/dev --command pnpm install
+        run: nix develop . --command pnpm install
       - name: Run Lint
-        run: nix develop /home/bytedream/dev --command pnpm run lint
+        run: nix develop . --command pnpm run lint
       - name: Build Project
-        run: nix develop /home/bytedream/dev --command pnpm run build
+        run: nix develop . --command pnpm run build
 
-  # 第二个任务：部署到服务器
   deploy:
     needs: build_and_test
     runs-on: ubuntu-latest
@@ -43,13 +42,23 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            # --- 您需要确认和修改的部分 ---
+            
+            # 1. 确认服务器上的项目路径是否正确
             cd /home/bytedream/react-docs
+            
             echo "Pulling latest code from master branch..."
-            git pull origin master  # <-- 建议这里也同步修改
+            git pull origin master
+            
+            # 2. 确认服务器上的 Nix 环境路径是否正确
             echo "Installing dependencies..."
             /nix/var/nix/profiles/default/bin/nix develop /home/bytedream/dev --command pnpm install
+            
             echo "Building application for production..."
             /nix/var/nix/profiles/default/bin/nix develop /home/bytedream/dev --command pnpm run build
+            
+            # 3. 将 'your-service-name.service' 修改为您的真实服务名
             echo "Restarting systemd service..."
-            sudo systemctl restart your-service-name.service
+            sudo systemctl restart csgo-cms-next.service
+            
             echo "Deployment successful!"
