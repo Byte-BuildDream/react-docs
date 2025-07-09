@@ -42,7 +42,8 @@ export interface MatchesPlayer {
 }
 
 export interface MatchesGameSettings {
-    Mode: '5v5' | '2v2' | '1v1' | '1v1_headshot'; // 游戏模式，默认 5v5
+    Mode: 'fiveVSfive' | 'twoVStwo' | 'oneVSone' | 'oneVSone_headshot'; // 游戏模式，默认 5v5
+    GameMode:'Competitive' | 'Deathmatch'
     Map: 'de_dust2' | 'de_inferno' | 'de_mirage' | 'de_nuke' | 'de_ancient' | 'de_anubis' | 'de_vertigo' | 'de_train' | 'de_overpass' | 'de_edin' | 'cs_italy' | 'cs_office'; // 地图
 }
 
@@ -93,7 +94,8 @@ export interface MatchesServerSetting{
 
 | 字段名 | 类型 | 必填 | 默认值 | 可选值 |
 |--------|------|------|--------|--------|
-| Mode | string | 是 | 5v5 | 5v5 、2v2、1v1、1v1_headshot |
+| Mode | string | 是 | fiveVSfive | fiveVSfive 、twoVStwo、oneVSone、oneVSone_headshot |
+| GameMode | enum | 是 | Competitive | Competitive 、Deathmatch |
 | Map | string | 是 | de_dust2 | de_dust2、de_inferno、de_mirage、de_nuke、de_ancient、de_anubis、de_vertigo、de_train、de_overpass、de_edin、cs_italy、cs_office |
 
 #### MatchesRoomSetting 对象字段
