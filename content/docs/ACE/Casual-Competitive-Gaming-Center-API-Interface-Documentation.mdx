@@ -1,0 +1,127 @@
+---
+title: 休闲竞技中心 API 接口文档
+---
+
+# API 接口文档
+
+此文档描述了后端提供的API接口及其相关参数。
+
+## 1. `CreateRoom`
+
+- **接口名称**: `CreateRoom`
+- **请求参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `UID` | `string` | 用户ID |
+
+- **响应参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `RoomInfo` | `RoomInfo` | 房间信息对象 |
+
+## 2. `JoinRoom`
+
+- **接口名称**: `JoinRoom`
+- **请求参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `UID` | `string` | 用户ID |
+| `RoomID` | `string` | 房间ID |
+| `Password` | `string?` | 房间密码 (可选) |
+| `RoomPosition` | `int` | 房间位置 |
+
+- **响应参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `void` | `void` | 无返回值 |
+
+## 3. `KickPlayer`
+
+- **接口名称**: `KickPlayer`
+- **请求参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `KickPosition` | `int` | 要踢出玩家的位置 |
+| `RoomID` | `string` | 房间ID |
+
+- **响应参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `void` | `void` | 无返回值 |
+
+## 4. `LeaveRoom`
+
+- **接口名称**: `LeaveRoom`
+- **请求参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `RoomID` | `string` | 房间ID |
+| `UID` | `string` | 用户ID |
+
+- **响应参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `void` | `void` | 无返回值 |
+
+## 5. `UpdateRoomSetting`
+
+- **接口名称**: `UpdateRoomSetting`
+- **请求参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `RoomID` | `string` | 房间ID |
+| `RoomMode` | `Mode` | 游戏模式 |
+| `RoomMap` | `Map` | 游戏地图 |
+| `RoomLocation` | `Location` | 房间位置 |
+| `RoomPlayerChoose` | `PlayerChoose` | 玩家选择 |
+| `Password` | `string` | 密码 |
+| `OperatorUID` | `string` | 操作者用户ID |
+
+- **响应参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `void` | `void` | 无返回值 |
+
+## 6. `SwitchPlayerPosition`
+
+- **接口名称**: `SwitchPlayerPosition`
+- **请求参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `RoomID` | `string` | 房间ID |
+| `x` | `int` | 目标X坐标 |
+| `y` | `int` | 目标Y坐标 |
+
+- **响应参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `void` | `void` | 无返回值 |
+
+## 7. `TransferOwnership`
+
+- **接口名称**: `TransferOwnership`
+- **请求参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `RoomID` | `string` | 房间ID |
+| `currentOwnerUID` | `string` | 当前房主用户ID |
+| `newOwnerUID` | `string` | 新房主用户ID |
+
+- **响应参数**:
+
+| 参数名 | 类型 | 描述 |
+|---|---|---|
+| `void` | `void` | 无返回值 |
