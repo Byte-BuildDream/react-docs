@@ -32,6 +32,9 @@ export interface MatchesRoom {
     ReadyPlayers: string[]; // 已准备玩家UID 
     GameSettings: MatchesGameSettings; // 游戏设置
     RoomSetting: MatchesRoomSetting; // 房间设置
+    ServerSetting: MatchesServerSetting; // 服务器设置
+    Status: 'wait' | 'ready' | 'gameing'; // 房间状态 默认为 wait 等待中 | ready 准备中 | gameing 游戏中 
+    CreateTime: string; // 房间创建时间
 }
 
 export interface MatchesPlayer {
@@ -39,11 +42,12 @@ export interface MatchesPlayer {
     UID: string; // 玩家UID
     Name: string; // 玩家名称
     Avatar: string; // 玩家头像
+    SteamID:string; // 玩家SteamID
 }
 
 export interface MatchesGameSettings {
     Mode: 'fiveVSfive' | 'twoVStwo' | 'oneVSone' | 'oneVSone_headshot'; // 游戏模式，默认 5v5
-    GameMode:'Competitive' | 'Deathmatch'
+    GameMode: 'Competitive' | 'Deathmatch'; // 游戏模式，默认 Competitive
     Map: 'de_dust2' | 'de_inferno' | 'de_mirage' | 'de_nuke' | 'de_ancient' | 'de_anubis' | 'de_vertigo' | 'de_train' | 'de_overpass' | 'de_edin' | 'cs_italy' | 'cs_office'; // 地图
 }
 
@@ -52,7 +56,6 @@ export interface MatchesRoomSetting {
     MaxPlayer: number; // 房间最大玩家数量
     Player_Choose: boolean; // 是否自主选择 false 为玩家自主选择 | true 为房主选择
     GameStart: boolean; // 是否开始游戏条件 false 为房主开始 | true 为准备开始
-    Visibility: boolean; // 房间可见性 false 为公共 | true 为不公开（仅好友）
 }
 
 export interface MatchesServerSetting{
