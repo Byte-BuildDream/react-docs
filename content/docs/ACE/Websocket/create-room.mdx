@@ -54,7 +54,13 @@ export default function SomePage() {
     }
 
     // 监听后端Event事件返回
-    // 监听房间信息更新
+    // 监听房间信息更新（大厅监听）
+    useUtilsService("CustomRoomCreateSuccess", (RoomID: string) => {
+        router.push(`/Matches/${RoomID}`); // 将玩家推送至对应的房间路由
+    });
+
+
+    // 监听房间信息更新（房间内监听）
     useUtilsService("RoomInfo", (RoomData:Room) => {
         console.log("收到房间信息更新:", roomData);
         // 更新至房间状态中，靠状态更新UID
@@ -86,7 +92,7 @@ public class PlayerHubService : Hub
             {
                 ID = GenerateRoomID(),
                 Name = GetPlayerName(creatorUID) + "的房间",
-                Type = "1", // 公共房间
+                Type = false, // 公共房间
                 MaxPlayer = 10,
                 Password = "",
                 Owner = creatorUID,
@@ -112,6 +118,10 @@ public class PlayerHubService : Hub
 
             // 将创建者加入房间组
             await Groups.AddToGroupAsync(Context.ConnectionId, room.ID);
+
+            // 此处代码错误：修正为向当前请求者单一广播
+            await Clients.All.SendAsync("CustomRoomCreateSuccess", room.ID);
+            
 
             // 广播房间创建事件
             await Clients.All.SendAsync("RoomInfo", room);
@@ -167,10 +177,17 @@ public class PlayerHubService : Hub
 
 ```javascript
 // 监听房间信息更新
-useUtilsService("RoomInfo", (RoomData:Room) => {
-        console.log("收到房间信息更新:", roomData);
+useUtilsService("RoomInfo", (Room:MatchesRoom) => {
+        console.log("收到房间信息更新:", Room);
         // 更新至房间状态中，靠状态更新UID
-        SetRoom(roomData);
+        SetRoom(Room);
+});
+```
+
+```javascript
+// 监听房间创建成功事件
+useUtilsService("CustomRoomCreateSuccess", (RoomID:string) => {
+        console.log("房间创建成功,ID为：", RoomID);
 });
 ```
 

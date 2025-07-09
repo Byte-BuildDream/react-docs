@@ -11,7 +11,7 @@ description: "Microsoft.AspNetCore.SignalR 自定义竞技房间接口文档"
 
 ### 连接信息
 
-- **Websocket地址**: `https://localhost:5001/PlayerHubService`
+- **Websocket地址**: `https://es.btyedream.com:11820/UtilsService`
 - **协议**: SignalR
 - **认证**: 需要用户身份验证
 
@@ -21,30 +21,46 @@ description: "Microsoft.AspNetCore.SignalR 自定义竞技房间接口文档"
 
 房间对象是当前接口的基础交互对象，用于创建、加入、房间设置等操作。
 
-```json
-{
-    "ID": "072504001",
-    "Name": "测试房间",
-    "Type": "1",
-    "MaxPlayer": 10,
-    "Password": "",
-    "Owner": "玩家的uid",
-    "Member": ["玩家的uid", "玩家的uid"],
-    "Watch": ["玩家的uid", "玩家的uid"],
-    "Ready": ["玩家的uid", "玩家的uid"],
-    "Game": {
-        "ID": "CutomMatch - 房间ID",
-        "Map": "de_dust2",
-        "Mode": "竞技模式"
-    },
-    "Room_Setting": {
-        "Region": "北京",
-        "Mode": "5v5",
-        "Player_Choose": true,
-        "Team_Balance": false
-    },
-    "status": "等待中",
-    "CreateTime": "2025-07-04 10:00:00"
+```tsx
+export interface MatchesRoom {
+    ID: string; // 房间ID
+    Name: string; // 房间名称
+    Type: boolean; // 房间类型 默认为false---公开房间 | 为true---私人房间
+    OwnerID: string; // 房间所有者ID
+    Members: MatchesPlayer[]; // 房间成员
+    Visitors: MatchesPlayer[]; // 房间访客
+    ReadyPlayers: string[]; // 已准备玩家UID 
+    GameSettings: MatchesGameSettings; // 游戏设置
+    RoomSetting: MatchesRoomSetting; // 房间设置
+}
+
+export interface MatchesPlayer {
+    ConnectID: string; // 玩家连接ID
+    UID: string; // 玩家UID
+    Name: string; // 玩家名称
+    Avatar: string; // 玩家头像
+}
+
+export interface MatchesGameSettings {
+    Mode: '5v5' | '2v2' | '1v1' | '1v1_headshot'; // 游戏模式，默认 5v5
+    Map: 'de_dust2' | 'de_inferno' | 'de_mirage' | 'de_nuke' | 'de_ancient' | 'de_anubis' | 'de_vertigo' | 'de_train' | 'de_overpass' | 'de_edin' | 'cs_italy' | 'cs_office'; // 地图
+}
+
+export interface MatchesRoomSetting {
+    Password: string; // 房间密码
+    MaxPlayer: number; // 房间最大玩家数量
+    Player_Choose: boolean; // 是否自主选择 false 为玩家自主选择 | true 为房主选择
+    GameStart: boolean; // 是否开始游戏条件 false 为房主开始 | true 为准备开始
+    Visibility: boolean; // 房间可见性 false 为公共 | true 为不公开（仅好友）
+}
+
+export interface MatchesServerSetting{
+    Region: 'cn-shanghai' | 'cn-beijing' | 'cn-chengdu' | 'cn-wuhan-lr' | 'cn-guangzhou' | 'cn-shenzhen'; // 服务器地区
+    ID: string; // 服务器ID
+    Status: 'wait_create' | 'creating' |'running' | 'waiting' | 'closed'; // 服务器状态
+    IP_Address: string; // 服务器IP地址信息
+    Port: string; // 服务器端口信息
+    CreateTime: string; // 服务器创建时间
 }
 ```
 
@@ -54,34 +70,52 @@ description: "Microsoft.AspNetCore.SignalR 自定义竞技房间接口文档"
 |--------|------|------|--------|------|
 | ID | string | 是 | - | 房间ID，系统生成 |
 | Name | string | 是 | 玩家名称 + 的房间 | 房间名称 |
-| Type | string | 是 | "1" | 房间类型："1"=公共房间，"2"=私人房间 |
-| MaxPlayer | int | 是 | 10 | 最大玩家数量，可选：10、6、4、2 |
-| Password | string | 是 | "" | 房间密码，传输时需加密 |
-| Owner | string | 是 | - | 房主的uid |
-| Member | array | 是 | [] | 成员列表，包括房主 |
-| Watch | array | 是 | [] | 观战席位列表 |
-| Ready | array | 是 | [] | 准备玩家列表 |
-| Game | object | 是 | - | 游戏设置对象 |
-| Room_Setting | object | 是 | - | 房间设置对象 |
+| Type | bool | 是 | "false" | 房间类型："false"= 公共房间，"true"=私人房间 |
+| OwnerID | string | 是 | - | 房主的uid |
+| Members | MatchesPlayer[] | 是 | [] | 成员列表，包括房主 |
+| Visitors | MatchesPlayer[] | 是 | [] | 观战席位列表 |
+| ReadyPlayers | string[] | 是 | [] | 准备玩家列表 |
+| GameSettings | MatchesGameSettings | 是 | - | 游戏设置对象 |
+| RoomSetting | MatchesRoomSetting | 是 | - | 房间设置对象 |
 | status | string | 是 | "等待中" | 房间状态：等待中、准备中、游戏中 |
 | CreateTime | string | 是 | - | 创建时间，系统生成 |
 
-#### Game对象字段
+#### MatchesPlayer 对象字段
 
 | 字段名 | 类型 | 必填 | 默认值 | 可选值 |
 |--------|------|------|--------|--------|
-| ID | string | 是 | CutomMatch - 房间ID | - |
-| Map | string | 是 | de_dust2 | de_dust2、de_mirage、de_inferno、de_nuke、de_train、de_overpass、de_vertigo |
-| Mode | string | 是 | 竞技模式 | 竞技模式、爆头竞技模式、死亡竞赛模式、爆头死亡竞赛模式 |
+| ConnectID | string | 是 | 玩家连接 | - |
+| UID | string | 是 | 玩家UID | - |
+| Name | string | 是 | 玩家名称 | - |
+| Avater | string | 是 | 玩家头像 | - |
 
-#### Room_Setting对象字段
+#### MatchesGameSettings 对象字段
 
 | 字段名 | 类型 | 必填 | 默认值 | 可选值 |
 |--------|------|------|--------|--------|
-| Region | string | 是 | 北京 | 北京、上海、广州、洛阳、成都 |
-| Mode | string | 是 | 5v5 | 5v5、3v3、2v2、1v1 |
-| Player_Choose | bool | 是 | true | true、false |
-| Team_Balance | bool | 是 | false | true、false |
+| Mode | string | 是 | 5v5 | 5v5 、2v2、1v1、1v1_headshot |
+| Map | string | 是 | de_dust2 | de_dust2、de_inferno、de_mirage、de_nuke、de_ancient、de_anubis、de_vertigo、de_train、de_overpass、de_edin、cs_italy、cs_office |
+
+#### MatchesRoomSetting 对象字段
+
+| 字段名 | 类型 | 必填 | 默认值 | 可选值 |
+|--------|------|------|--------|--------|
+| Password | string | 否 | |  |
+| MaxPlayer | int | 是 | 10 | 10、4、2 |
+| Player_Choose | bool | 是 | true | false 为玩家自主选择 、 true 为房主选择 |
+| GameStart | bool | 是 | false | false 为房主开始 、 true 为准备开始 |
+
+
+#### MatchesServerSetting 对象字段
+
+| 字段名 | 类型 | 必填 | 默认值 | 可选值 |
+|--------|------|------|--------|--------|
+| Region | string | 是 | cn-shanghai | cn-shanghai、cn-beijing、cn-chengdu、cn-wuhan-lr、cn-guangzhou、cn-shenzhen |
+| ID | string | 否 | 阿里云生成 |  |
+| Status | enum | 是 | wait_create | wait_create、creating、running、waiting、closed |
+| IP_Address | string | 是 | "" |  |
+| Port | string | 是 | "" |  |
+| CreateTime | string | 是 |  |  |
 
 ## 接口列表
 
