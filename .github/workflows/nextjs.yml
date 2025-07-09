@@ -1,5 +1,3 @@
-# .github/workflows/ci-cd.yml
-
 name: Deploy Next.js to Server
 
 on:
@@ -7,57 +5,39 @@ on:
     branches:
       - master
 
-# jobs:
-#   build_and_test:
-#     runs-on: ubuntu-latest
-#     steps:
-#       - name: Checkout Code
-#         uses: actions/checkout@v4
-#       - name: Install Nix
-#         uses: cachix/install-nix-action@v25
-#         with:
-#           nix_path: nixpkgs=channel:nixos-unstable
-#       - name: Install pnpm
-#         uses: pnpm/action-setup@v3
-#         with:
-#           version: 8
-      
-#       # --- 修正之处 ---
-#       # 在 GitHub Actions 环境中，Nix 配置文件位于项目根目录，所以使用 "."
-#       - name: Install Dependencies
-#         run: nix develop . --command pnpm install
-#       - name: Build Project
-#         run: nix develop . --command pnpm run build
-
-  deploy:
-    needs: build_and_test
-    runs-on: ubuntu-latest
+jobs:
+  deploy: # 将任务名称改为 'deploy'，因为现在只有一个部署任务
+    runs-on: ubuntu-latest # GitHub Actions runner 仍需要运行，但只用于 SSH 连接
     steps:
-      - name: Deploy to Server
+      - name: Deploy to Server via SSH
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
-          port: ${{ secrets.SSH_PORT }} 
+          port: ${{ secrets.SSH_PORT }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # --- 您需要确认和修改的部分 ---
-            
+            echo "Connecting to server and deploying..."
+
             # 1. 确认服务器上的项目路径是否正确
-            cd /home/bytedream/react-docs
-            
+            # 这是您项目在服务器上的根目录。请确保此路径正确。
+            cd /home/bytedream/react-docs || { echo "Error: Project directory not found."; exit 1; }
+
             echo "Pulling latest code from master branch..."
-            git pull origin master
-            
+            git pull origin master || { echo "Error: Git pull failed."; exit 1; }
+
             # 2. 确认服务器上的 Nix 环境路径是否正确
-            echo "Installing dependencies..."
-            /nix/var/nix/profiles/default/bin/nix develop /home/bytedream/dev --command pnpm install
-            
+            # 这些命令假设您的服务器上已正确安装 Nix，并且 Nix 的二进制文件在 PATH 中，
+            # 或者您已提供了完整的路径。
+            # '/home/bytedream/react-docs' 是您的项目目录，其中包含您的 shell.nix 或 flake.nix
+            echo "Installing dependencies using Nix and pnpm..."
+            /nix/var/nix/profiles/default/bin/nix develop /home/bytedream/react-docs --command pnpm install || { echo "Error: pnpm install failed."; exit 1; }
+
             echo "Building application for production..."
-            /nix/var/nix/profiles/default/bin/nix develop /home/bytedream/dev --command pnpm run build
-            
-            # 3. 将 'your-service-name.service' 修改为您的真实服务名
+            /nix/var/nix/profiles/default/bin/nix develop /home/bytedream/react-docs --command pnpm run build || { echo "Error: Build failed."; exit 1; }
+
+            # 3. 将 'csgo-cms.service' 修改为您的真实 Systemd 服务名
             echo "Restarting systemd service..."
-            sudo systemctl restart csgo-cms.service
-            
+            sudo systemctl restart csgo-cms.service || { echo "Error: Failed to restart service."; exit 1; }
+
             echo "Deployment successful!"
