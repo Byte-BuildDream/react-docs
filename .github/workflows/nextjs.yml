@@ -24,7 +24,8 @@ jobs:
             cd /home/bytedream/react-docs || { echo "Error: Project directory not found."; exit 1; }
 
             echo "Pulling latest code from master branch..."
-            git pull origin master || { echo "Error: Git pull failed."; exit 1; }
+            git pull origin master
+
 
             # 2. 确认服务器上的 Nix 环境路径是否正确
             # 这些命令假设您的服务器上已正确安装 Nix，并且 Nix 的二进制文件在 PATH 中，
