@@ -177,7 +177,7 @@ public class PlayerHubService : Hub
 
 ```javascript
 // 监听房间信息更新
-useUtilsService("RoomInfo", (Room:MatchesRoom) => {
+useUtilsService("MatchesRoomInfo", (Room:MatchesRoom) => {
         console.log("收到房间信息更新:", Room);
         // 更新至房间状态中，靠状态更新UID
         SetRoom(Room);
@@ -186,7 +186,7 @@ useUtilsService("RoomInfo", (Room:MatchesRoom) => {
 
 ```javascript
 // 监听房间创建成功事件
-useUtilsService("CustomRoomCreateSuccess", (RoomID:string) => {
+useUtilsService("MatchesRoomCreateSuccess", (RoomID:string) => {
         console.log("房间创建成功,ID为：", RoomID);
 });
 ```

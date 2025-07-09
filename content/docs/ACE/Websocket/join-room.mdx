@@ -139,12 +139,12 @@ public class PlayerHubService : Hub
 
 ## 返回事件
 
-### TeamInfo 事件
+### MatchesRoomInfo 事件
 
-当玩家成功加入房间后，服务器会向房间内所有玩家广播 `TeamInfo` 事件。
+当玩家成功加入房间后，服务器会向单独对该新加入的玩家发送 `MatchesRoomInfo` 事件。
 
 #### 事件名称
-`TeamInfo`
+`MatchesRoomInfo`
 
 #### 事件数据
 ```json
@@ -179,17 +179,19 @@ public class PlayerHubService : Hub
 
 ### PlayerJoined 事件
 
-当有新玩家加入房间时，服务器会广播 `PlayerJoined` 事件。
+当有新玩家加入房间时，服务器会广播 `PlayerJoined` 事件（不包含新加入的玩家）。
+
 
 #### 事件名称
 `PlayerJoined`
 
+
 #### 事件数据
 ```json
 {
-    "roomID": "072504001",
-    "playerUID": "12345-67890-12345-67890-12345",
-    "playerName": "新玩家"
+    "UID": "12345-67890-12345-67890-12345",
+    "Name": "新玩家",
+    "Avatar": "头像地址"
 }
 ```
 
@@ -197,7 +199,7 @@ public class PlayerHubService : Hub
 
 ```javascript
 // 监听房间信息更新
-connection.on("TeamInfo", (roomData) => {
+connection.on("MatchesRoomInfo", (roomData) => {
     console.log("房间信息更新:", roomData);
     updateRoomUI(roomData);
 });

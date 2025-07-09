@@ -162,41 +162,6 @@ public class PlayerHubService : Hub
 
 ## 返回事件
 
-### TeamInfo 事件
-
-当玩家被成功踢出后，服务器会向房间内剩余玩家广播 `TeamInfo` 事件。
-
-#### 事件名称
-`TeamInfo`
-
-#### 事件数据
-```json
-{
-    "ID": "072504001",
-    "Name": "测试房间",
-    "Type": "1",
-    "MaxPlayer": 10,
-    "Password": "",
-    "Owner": "12345-67890-12345-67890-12345",
-    "Member": ["12345-67890-12345-67890-12345"],
-    "Watch": [],
-    "Ready": [],
-    "Game": {
-        "ID": "CutomMatch - 072504001",
-        "Map": "de_dust2",
-        "Mode": "竞技模式"
-    },
-    "Room_Setting": {
-        "Region": "北京",
-        "Mode": "5v5",
-        "Player_Choose": true,
-        "Team_Balance": false
-    },
-    "status": "等待中",
-    "CreateTime": "2025-07-04 10:00:00"
-}
-```
-
 ### PlayerKicked 事件
 
 当有玩家被踢出时，服务器会向房间内剩余玩家广播 `PlayerKicked` 事件。
