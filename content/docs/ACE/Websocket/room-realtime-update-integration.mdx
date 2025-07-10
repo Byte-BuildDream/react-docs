@@ -1,0 +1,544 @@
+---
+title: "房间实时更新机制集成指南"
+description: "如何将GetMatchesRoomList的实时更新机制集成到现有系统中"
+---
+
+# 房间实时更新机制集成指南
+
+## 概述
+
+本文档详细说明了如何将 `GetMatchesRoomList` 接口的实时更新机制集成到现有的房间管理系统中，确保房间变更能够及时向前端推送更新事件。
+
+## 集成步骤
+
+### 1. 修改现有的房间操作方法
+
+#### 1.1 房间设置更新集成
+
+在 `UpdateRoomSettings` 方法中添加实时更新广播：
+
+```csharp
+public async Task<Room> UpdateRoomSettings(string roomID, RoomSettings newSettings, string operatorUID)
+{
+    try
+    {
+        // ... 现有的验证和更新逻辑 ...
+
+        // 更新数据库
+        await UpdateRoomInDatabase(room);
+
+        // 广播房间信息更新
+        await Clients.Group(roomID).SendAsync("TeamInfo", room);
+
+        // 新增：广播房间列表更新
+        await LeisureCenterService.BroadcastRoomUpdate(room);
+
+        // ... 其他现有逻辑 ...
+
+        return room;
+    }
+    catch (Exception ex)
+    {
+        throw new HubException($"更改房间设置失败: {ex.Message}");
+    }
+}
+```
+
+#### 1.2 房间密码设置集成
+
+在 `SetRoomPassword` 方法中添加实时更新广播：
+
+```csharp
+public async Task<Room> SetRoomPassword(string roomID, string password, string operatorUID)
+{
+    try
+    {
+        // ... 现有的验证和更新逻辑 ...
+
+        // 更新数据库
+        await UpdateRoomInDatabase(room);
+
+        // 广播房间信息更新
+        await Clients.Group(roomID).SendAsync("TeamInfo", room);
+
+        // 新增：广播房间列表更新
+        await LeisureCenterService.BroadcastRoomUpdate(room);
+
+        // ... 其他现有逻辑 ...
+
+        return room;
+    }
+    catch (Exception ex)
+    {
+        throw new HubException($"设置房间密码失败: {ex.Message}");
+    }
+}
+```
+
+#### 1.3 游戏设置更新集成
+
+在 `UpdateGameSettings` 方法中添加实时更新广播：
+
+```csharp
+public async Task<Room> UpdateGameSettings(string roomID, GameSettings newGameSettings, string operatorUID)
+{
+    try
+    {
+        // ... 现有的验证和更新逻辑 ...
+
+        // 更新数据库
+        await UpdateRoomInDatabase(room);
+
+        // 广播房间信息更新
+        await Clients.Group(roomID).SendAsync("TeamInfo", room);
+
+        // 新增：广播房间列表更新
+        await LeisureCenterService.BroadcastRoomUpdate(room);
+
+        // ... 其他现有逻辑 ...
+
+        return room;
+    }
+    catch (Exception ex)
+    {
+        throw new HubException($"更改游戏设置失败: {ex.Message}");
+    }
+}
+```
+
+### 2. 房间生命周期事件集成
+
+#### 2.1 房间创建事件
+
+在 `CreateRoom` 方法中添加房间创建广播：
+
+```csharp
+public async Task<Room> CreateRoom(string creatorUID)
+{
+    try
+    {
+        // ... 现有的房间创建逻辑 ...
+
+        // 保存房间到数据库
+        await SaveRoomToDatabase(room);
+
+        // 新增：广播房间创建事件
+        await LeisureCenterService.BroadcastRoomCreated(room);
+
+        // ... 其他现有逻辑 ...
+
+        return room;
+    }
+    catch (Exception ex)
+    {
+        throw new HubException($"创建房间失败: {ex.Message}");
+    }
+}
+```
+
+#### 2.2 房间删除事件
+
+在房间删除逻辑中添加删除广播：
+
+```csharp
+public async Task<bool> DeleteRoom(string roomID, string operatorUID)
+{
+    try
+    {
+        // ... 现有的房间删除逻辑 ...
+
+        // 从数据库中删除房间
+        await DeleteRoomFromDatabase(roomID);
+
+        // 新增：广播房间删除事件
+        await LeisureCenterService.BroadcastRoomDeleted(roomID);
+
+        // ... 其他现有逻辑 ...
+
+        return true;
+    }
+    catch (Exception ex)
+    {
+        throw new HubException($"删除房间失败: {ex.Message}");
+    }
+}
+```
+
+### 3. 玩家状态变更集成
+
+#### 3.1 玩家加入房间
+
+在 `JoinRoom` 方法中添加实时更新广播：
+
+```csharp
+public async Task<Room> JoinRoom(string roomID, string playerUID, string password = null)
+{
+    try
+    {
+        // ... 现有的加入房间逻辑 ...
+
+        // 更新数据库
+        await UpdateRoomInDatabase(room);
+
+        // 广播房间信息更新
+        await Clients.Group(roomID).SendAsync("TeamInfo", room);
+
+        // 新增：广播房间列表更新
+        await LeisureCenterService.BroadcastRoomUpdate(room);
+
+        // ... 其他现有逻辑 ...
+
+        return room;
+    }
+    catch (Exception ex)
+    {
+        throw new HubException($"加入房间失败: {ex.Message}");
+    }
+}
+```
+
+#### 3.2 玩家离开房间
+
+在 `LeaveRoom` 方法中添加实时更新广播：
+
+```csharp
+public async Task<bool> LeaveRoom(string roomID, string playerUID)
+{
+    try
+    {
+        // ... 现有的离开房间逻辑 ...
+
+        // 更新数据库
+        await UpdateRoomInDatabase(room);
+
+        // 广播房间信息更新
+        await Clients.Group(roomID).SendAsync("TeamInfo", room);
+
+        // 新增：广播房间列表更新
+        await LeisureCenterService.BroadcastRoomUpdate(room);
+
+        // ... 其他现有逻辑 ...
+
+        return true;
+    }
+    catch (Exception ex)
+    {
+        throw new HubException($"离开房间失败: {ex.Message}");
+    }
+}
+```
+
+### 4. 服务器状态变更集成
+
+#### 4.1 服务器创建完成
+
+在 `CreateRoomServer` 方法中添加状态更新广播：
+
+```csharp
+public async Task<string> CreateRoomServer(string RoomID, int CORE, float RAM, string RegionId)
+{
+    try
+    {
+        // ... 现有的服务器创建逻辑 ...
+
+        // 更新服务器状态
+        room.Server.Status = "ONLINE";
+        await UpdateRoomInDatabase(room);
+
+        // 新增：广播房间列表更新
+        await LeisureCenterService.BroadcastRoomUpdate(room);
+
+        // ... 其他现有逻辑 ...
+
+        return "服务器创建成功";
+    }
+    catch (Exception ex)
+    {
+        return $"服务器创建失败: {ex.Message}";
+    }
+}
+```
+
+#### 4.2 游戏开始/结束
+
+在游戏状态变更时添加实时更新广播：
+
+```csharp
+public async Task StartGame(string roomID, string operatorUID)
+{
+    try
+    {
+        // ... 现有的游戏开始逻辑 ...
+
+        // 更新游戏状态
+        room.status = "gameing";
+        await UpdateRoomInDatabase(room);
+
+        // 新增：广播房间列表更新
+        await LeisureCenterService.BroadcastRoomUpdate(room);
+
+        // ... 其他现有逻辑 ...
+    }
+    catch (Exception ex)
+    {
+        throw new HubException($"开始游戏失败: {ex.Message}");
+    }
+}
+```
+
+### 5. 定时更新机制集成
+
+#### 5.1 在 Startup.cs 中注册定时服务
+
+```csharp
+public void ConfigureServices(IServiceCollection services)
+{
+    // ... 现有的服务注册 ...
+
+    // 注册房间更新定时服务
+    services.AddHostedService<RoomUpdateBackgroundService>();
+}
+```
+
+#### 5.2 创建后台服务
+
+```csharp
+public class RoomUpdateBackgroundService : BackgroundService
+{
+    private readonly IHubContext<LeisureCenterService> _hubContext;
+    private readonly ILogger<RoomUpdateBackgroundService> _logger;
+
+    public RoomUpdateBackgroundService(
+        IHubContext<LeisureCenterService> hubContext,
+        ILogger<RoomUpdateBackgroundService> logger)
+    {
+        _hubContext = hubContext;
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                // 每分钟检查一次房间更新
+                await CheckRoomUpdates();
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"房间更新检查失败: {ex.Message}");
+                await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+            }
+        }
+    }
+
+    private async Task CheckRoomUpdates()
+    {
+        var publicRooms = LeisureCenterService.CustomRoomPool
+            .Where(room => room.BaseInfo.TeamOpenStatus == true)
+            .OrderByDescending(room => room.RoomID)
+            .Take(20)
+            .ToList();
+
+        var roomList = publicRooms.Select(room => ConvertToMatchesRoom(room)).ToList();
+        var totalCount = LeisureCenterService.CustomRoomPool.Count(r => r.BaseInfo.TeamOpenStatus == true);
+
+        await _hubContext.Clients.Group("CustomRoomHall").SendAsync("RoomListUpdated", new
+        {
+            rooms = roomList,
+            totalCount = totalCount,
+            timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+        });
+    }
+
+    private MatchesRoom ConvertToMatchesRoom(CustomRoom customRoom)
+    {
+        // 转换逻辑与 GetMatchesRoomList 中的相同
+        // ... 转换代码 ...
+    }
+}
+```
+
+### 6. 前端集成示例
+
+#### 6.1 在现有页面中添加实时更新监听
+
+```javascript
+// 在现有的房间列表页面中添加监听器
+import { useUtilsService } from "@/lib/hub";
+
+export default function ExistingRoomListPage() {
+    const [roomList, setRoomList] = useState([]);
+
+    // 监听房间列表更新
+    useUtilsService("RoomListUpdated", (data) => {
+        console.log("收到房间列表更新:", data);
+        setRoomList(data.rooms);
+    });
+
+    // 监听单个房间更新
+    useUtilsService("RoomUpdated", (roomData) => {
+        console.log("收到房间更新:", roomData);
+        setRoomList(prevList => {
+            const updatedList = prevList.map(room => 
+                room.ID === roomData.ID ? roomData : room
+            );
+            return updatedList;
+        });
+    });
+
+    // 监听房间创建
+    useUtilsService("RoomCreated", (roomData) => {
+        console.log("新房间创建:", roomData);
+        setRoomList(prevList => {
+            const newList = prevList.length >= 20 
+                ? prevList.slice(0, 19) 
+                : prevList;
+            return [roomData, ...newList];
+        });
+    });
+
+    // 监听房间删除
+    useUtilsService("RoomDeleted", (roomID) => {
+        console.log("房间被删除:", roomID);
+        setRoomList(prevList => 
+            prevList.filter(room => room.ID !== roomID)
+        );
+    });
+
+    // ... 现有的页面逻辑 ...
+}
+```
+
+#### 6.2 在房间详情页面中添加更新监听
+
+```javascript
+export default function RoomDetailPage({ roomID }) {
+    const [room, setRoom] = useState(null);
+
+    // 监听房间信息更新
+    useUtilsService("RoomUpdated", (roomData) => {
+        if (roomData.ID === roomID) {
+            console.log("当前房间信息更新:", roomData);
+            setRoom(roomData);
+        }
+    });
+
+    // 监听房间删除
+    useUtilsService("RoomDeleted", (deletedRoomID) => {
+        if (deletedRoomID === roomID) {
+            console.log("当前房间被删除");
+            // 跳转到房间列表页面
+            router.push('/matches');
+        }
+    });
+
+    // ... 现有的房间详情逻辑 ...
+}
+```
+
+### 7. 性能优化建议
+
+#### 7.1 批量更新优化
+
+```csharp
+// 在多个房间同时更新时，使用批量广播
+public static async Task BroadcastMultipleRoomUpdates(List<CustomRoom> rooms)
+{
+    try
+    {
+        var roomUpdates = rooms.Select(room => ConvertToMatchesRoom(room)).ToList();
+        
+        await _hubContext.Clients.Group("CustomRoomHall").SendAsync("MultipleRoomsUpdated", new
+        {
+            rooms = roomUpdates,
+            timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+        });
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError($"批量广播房间更新失败: {ex.Message}");
+    }
+}
+```
+
+#### 7.2 连接状态检查
+
+```csharp
+// 在广播前检查连接状态
+public static async Task BroadcastRoomUpdateWithConnectionCheck(CustomRoom room)
+{
+    try
+    {
+        var matchesRoom = ConvertToMatchesRoom(room);
+        
+        // 检查是否有活跃连接
+        var activeConnections = await _hubContext.Clients.Group("CustomRoomHall").SendAsync("RoomUpdated", matchesRoom);
+        
+        if (activeConnections == null || activeConnections.Count == 0)
+        {
+            _logger.LogInformation("没有活跃连接，跳过广播");
+        }
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError($"广播房间更新失败: {ex.Message}");
+    }
+}
+```
+
+### 8. 监控和日志
+
+#### 8.1 添加监控指标
+
+```csharp
+public static class RoomUpdateMetrics
+{
+    public static readonly Counter RoomUpdatesSent = Metrics.CreateCounter("room_updates_sent_total", "Total room updates sent");
+    public static readonly Counter RoomListUpdatesSent = Metrics.CreateCounter("room_list_updates_sent_total", "Total room list updates sent");
+    public static readonly Histogram UpdateLatency = Metrics.CreateHistogram("room_update_latency_seconds", "Room update latency");
+}
+```
+
+#### 8.2 添加详细日志
+
+```csharp
+public static async Task BroadcastRoomUpdateWithLogging(CustomRoom room)
+{
+    var stopwatch = Stopwatch.StartNew();
+    
+    try
+    {
+        var matchesRoom = ConvertToMatchesRoom(room);
+        
+        await _hubContext.Clients.Group("CustomRoomHall").SendAsync("RoomUpdated", matchesRoom);
+        
+        stopwatch.Stop();
+        
+        RoomUpdateMetrics.RoomUpdatesSent.Inc();
+        RoomUpdateMetrics.UpdateLatency.Observe(stopwatch.Elapsed.TotalSeconds);
+        
+        _logger.LogInformation($"房间 {room.RoomID} 更新广播完成，耗时: {stopwatch.ElapsedMilliseconds}ms");
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError($"广播房间 {room.RoomID} 更新失败: {ex.Message}");
+    }
+}
+```
+
+## 总结
+
+通过以上集成步骤，你可以将实时更新机制无缝集成到现有的房间管理系统中。这样，当前端获取房间列表后，任何房间的变更都会及时向前端推送更新事件，确保用户看到的房间信息始终是最新的。
+
+关键要点：
+
+1. **在现有方法中添加广播调用**：确保所有房间变更操作都会触发实时更新
+2. **使用后台服务进行定时更新**：定期检查并广播房间列表更新
+3. **前端添加事件监听**：在相关页面中添加实时更新监听器
+4. **性能优化**：使用批量更新和连接状态检查来优化性能
+5. **监控和日志**：添加详细的监控指标和日志记录
+
+这样，你就实现了一个完整的房间实时更新系统，满足了你的需求：获取单页20条数据，并在房间有变更时及时向前端发送更新事件。 

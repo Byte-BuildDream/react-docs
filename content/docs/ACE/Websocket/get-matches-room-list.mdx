@@ -1,0 +1,677 @@
+---
+title: "获取自定义竞技大厅房间列表"
+description: "GetMatchesRoomList - 获取大厅房间列表"
+---
+
+# 获取房间接口
+
+## 接口信息
+
+- **接口名称**: `GetMatchesRoomList`
+- **描述**: 获取自定义竞技大厅房间列表，支持分页和实时更新通知
+- **调用方式**: SignalR Hub方法调用
+
+## 参数说明
+
+| 参数名 | 类型 | 必填 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| page | number | 是 | 1 | 页码，从1开始 |
+
+### 参数示例
+
+```json
+{
+    "page": 1
+}
+```
+
+## 调用示例
+
+### 前端调用（JavaScript）
+
+```javascript
+// 引入全局Websocket上下文、监听器
+import { useUtilsService, useUtilsServiceContext } from "@/lib/hub";
+
+export default function MatchesPage() {
+    // 声明方法：请求，Websocket连接状态值：连接状态、是否连接
+    const { invoke, connectionState, isConnected } = useUtilsServiceContext(); 
+    const [roomList, setRoomList] = useState<MatchesRoom[]>([]);
+    const [totalCount, setTotalCount] = useState(0);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [pageSize, setPageSize] = useState(20);
+
+    // 获取房间列表函数
+    const getRoomList = async (page = 1) => {
+        try {
+            // 调用获取房间列表接口
+            invoke("GetMatchesRoomList", page)
+                .then(result => {
+                    console.log("获取房间列表成功:", result);
+                    setRoomList(result.rooms);
+                    setTotalCount(result.totalCount);
+                    setCurrentPage(result.currentPage);
+                    setTotalPages(result.totalPages);
+                    setPageSize(result.pageSize);
+                })
+                .catch(err => {
+                    console.error("获取房间列表失败:", err);
+                });
+        } catch (error) {
+            console.error("获取房间列表失败:", error);
+        }
+    };
+
+    // 监听房间列表更新事件
+    useUtilsService("RoomListUpdated", (data: { 
+        rooms: MatchesRoom[], 
+        totalCount: number,
+        currentPage: number,
+        totalPages: number,
+        pageSize: number
+    }) => {
+        console.log("收到房间列表更新:", data);
+        setRoomList(data.rooms);
+        setTotalCount(data.totalCount);
+        setCurrentPage(data.currentPage);
+        setTotalPages(data.totalPages);
+        setPageSize(data.pageSize);
+    });
+
+    // 监听单个房间更新事件
+    useUtilsService("RoomUpdated", (roomData: MatchesRoom) => {
+        console.log("收到房间更新:", roomData);
+        setRoomList(prevList => {
+            const updatedList = prevList.map(room => 
+                room.ID === roomData.ID ? roomData : room
+            );
+            return updatedList;
+        });
+    });
+
+    // 监听房间删除事件
+    useUtilsService("RoomDeleted", (roomID: string) => {
+        console.log("房间被删除:", roomID);
+        setRoomList(prevList => 
+            prevList.filter(room => room.ID !== roomID)
+        );
+    });
+
+    // 监听房间创建事件
+    useUtilsService("RoomCreated", (roomData: MatchesRoom) => {
+        console.log("新房间创建:", roomData);
+        setRoomList(prevList => {
+            // 如果列表已满，移除最后一个房间
+            const newList = prevList.length >= 20 
+                ? prevList.slice(0, 19) 
+                : prevList;
+            return [roomData, ...newList];
+        });
+    });
+
+    // 组件挂载时获取房间列表
+    useEffect(() => {
+        if (isConnected) {
+            getRoomList(1); // 获取第一页
+        }
+    }, [isConnected]);
+
+    // 分页处理函数
+    const handlePageChange = (newPage: number) => {
+        if (newPage >= 1 && newPage <= totalPages) {
+            setCurrentPage(newPage);
+            getRoomList(newPage);
+        }
+    };
+
+    return (
+        <div>
+            <h1>自定义竞技大厅</h1>
+            <p>总房间数: {totalCount}</p>
+            <p>当前页: {currentPage} / {totalPages}</p>
+            
+            <div className="room-list">
+                {roomList.map(room => (
+                    <div key={room.ID} className="room-item">
+                        <h3>{room.Name}</h3>
+                        <p>房主: {room.OwnerID}</p>
+                        <p>状态: {room.Status}</p>
+                        <p>玩家数: {room.Members.length}/{room.RoomSetting.MaxPlayer}</p>
+                        <p>地图: {room.GameSettings.Map}</p>
+                        {room.RoomSetting.Password && (
+                            <p>🔒 需要密码</p>
+                        )}
+                    </div>
+                ))}
+            </div>
+            
+            {/* 分页控件 */}
+            <div className="pagination">
+                <button 
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage <= 1}
+                >
+                    上一页
+                </button>
+                <span>第 {currentPage} 页，共 {totalPages} 页</span>
+                <button 
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage >= totalPages}
+                >
+                    下一页
+                </button>
+            </div>
+        </div>
+    );
+}
+```
+
+### 后端实现（C#）
+
+```csharp
+public class LeisureCenterService : Hub
+{
+    private static IHubContext<LeisureCenterService> _hubContext;
+    public static List<CustomRoom> CustomRoomPool = new List<CustomRoom>();
+    public static List<CustomRoom> CustomRoomInvitePool = new List<CustomRoom>();
+    public static List<IMessage> MessageList = new List<IMessage>();
+    
+    // 房间更新订阅者管理
+    private static Dictionary<string, List<string>> _roomUpdateSubscribers = new Dictionary<string, List<string>>();
+    private static Timer _roomUpdateTimer;
+
+    public LeisureCenterService(IHubContext<LeisureCenterService> hubContext)
+    {
+        _hubContext = hubContext;
+        
+        // 初始化定时器，每分钟检查房间更新
+        if (_roomUpdateTimer == null)
+        {
+            _roomUpdateTimer = new Timer(CheckRoomUpdates, null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
+        }
+    }
+
+    /// <summary>
+    /// 获取房间列表（带分页和实时更新）
+    /// </summary>
+    /// <param name="page">页码，从1开始</param>
+    /// <returns>房间列表和总数</returns>
+    public async Task<object> GetMatchesRoomList(int page)
+    {
+        try
+        {
+            // 验证页码参数
+            if (page < 1)
+            {
+                throw new HubException("页码必须大于等于1");
+            }
+
+            // 计算分页参数
+            int pageSize = 20;
+            int skip = (page - 1) * pageSize;
+            
+            // 获取公开的房间列表（分页）
+            var publicRooms = CustomRoomPool
+                .Where(room => room.BaseInfo.TeamOpenStatus == true) // 只获取公开房间
+                .OrderByDescending(room => room.RoomID) // 按创建时间倒序
+                .Skip(skip)
+                .Take(pageSize)
+                .ToList();
+
+            // 转换为前端需要的格式
+            var roomList = publicRooms.Select(room => ConvertToMatchesRoom(room)).ToList();
+
+            // 将连接添加到房间更新订阅者列表
+            await AddRoomUpdateSubscriber(Context.ConnectionId);
+
+            // 将连接加入大厅组
+            await Groups.AddToGroupAsync(Context.ConnectionId, "CustomRoomHall");
+
+            // 返回房间列表和分页信息
+            return new
+            {
+                rooms = roomList,
+                totalCount = CustomRoomPool.Count(r => r.BaseInfo.TeamOpenStatus == true),
+                currentPage = page,
+                pageSize = pageSize,
+                totalPages = (int)Math.Ceiling((double)CustomRoomPool.Count(r => r.BaseInfo.TeamOpenStatus == true) / pageSize),
+                timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"获取房间列表失败: {ex.Message}");
+            throw new HubException($"获取房间列表失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 将CustomRoom转换为MatchesRoom格式
+    /// </summary>
+    private MatchesRoom ConvertToMatchesRoom(CustomRoom customRoom)
+    {
+        return new MatchesRoom
+        {
+            ID = customRoom.RoomID,
+            Name = customRoom.BaseInfo.RoomName,
+            Type = customRoom.BaseInfo.TeamOpenStatus == false, // 私人房间
+            OwnerID = customRoom.Owner.UID,
+            Members = customRoom.TeamMembers.Select(p => new MatchesPlayer
+            {
+                ConnectID = p.ConnectID,
+                UID = p.UID,
+                Name = p.PInfo.Username,
+                Avatar = p.PInfo.AvatarUrl,
+                SteamID = p.SteamId
+            }).ToList(),
+            Visitors = new List<MatchesPlayer>(), // 观战者列表
+            ReadyPlayers = new List<string>(), // 准备玩家列表
+            GameSettings = new MatchesGameSettings
+            {
+                Mode = GetGameMode(customRoom.GameInfo.GameMode),
+                GameMode = "Competitive", // 默认竞技模式
+                Map = customRoom.GameInfo.GameMap
+            },
+            RoomSetting = new MatchesRoomSetting
+            {
+                Password = customRoom.BaseInfo.Password,
+                MaxPlayer = customRoom.BaseInfo.MaxPlayerSize,
+                Player_Choose = true, // 默认允许玩家选择
+                GameStart = false // 默认房主开始
+            },
+            ServerSetting = new MatchesServerSetting
+            {
+                Region = customRoom.Server.ServerRegion,
+                ID = customRoom.Server.ServerID,
+                Status = GetServerStatus(customRoom.Server.Status),
+                IP_Address = customRoom.Server.ServerIP,
+                Port = customRoom.Server.Port,
+                CreateTime = customRoom.Server.CreateTime
+            },
+            Status = customRoom.GameInfo.GameStatus == true ? "gameing" : "wait",
+            CreateTime = customRoom.Server.CreateTime
+        };
+    }
+
+    /// <summary>
+    /// 添加房间更新订阅者
+    /// </summary>
+    private async Task AddRoomUpdateSubscriber(string connectionId)
+    {
+        lock (_roomUpdateSubscribers)
+        {
+            if (!_roomUpdateSubscribers.ContainsKey("hall"))
+            {
+                _roomUpdateSubscribers["hall"] = new List<string>();
+            }
+            
+            if (!_roomUpdateSubscribers["hall"].Contains(connectionId))
+            {
+                _roomUpdateSubscribers["hall"].Add(connectionId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 检查房间更新并通知订阅者
+    /// </summary>
+    private async void CheckRoomUpdates(object state)
+    {
+        try
+        {
+            var publicRooms = CustomRoomPool
+                .Where(room => room.BaseInfo.TeamOpenStatus == true)
+                .OrderByDescending(room => room.RoomID)
+                .Take(20)
+                .ToList();
+
+            var roomList = publicRooms.Select(room => ConvertToMatchesRoom(room)).ToList();
+            var totalCount = CustomRoomPool.Count(r => r.BaseInfo.TeamOpenStatus == true);
+
+            // 向所有订阅者广播房间列表更新
+            await _hubContext.Clients.Group("CustomRoomHall").SendAsync("RoomListUpdated", new
+            {
+                rooms = roomList,
+                totalCount = totalCount,
+                currentPage = 1, // 实时更新只更新第一页
+                pageSize = 20,
+                totalPages = (int)Math.Ceiling((double)totalCount / 20),
+                timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"检查房间更新失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 广播单个房间更新
+    /// </summary>
+    public static async Task BroadcastRoomUpdate(CustomRoom room)
+    {
+        try
+        {
+            var matchesRoom = ConvertToMatchesRoom(room);
+            
+            await _hubContext.Clients.Group("CustomRoomHall").SendAsync("RoomUpdated", matchesRoom);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"广播房间更新失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 广播房间创建事件
+    /// </summary>
+    public static async Task BroadcastRoomCreated(CustomRoom room)
+    {
+        try
+        {
+            var matchesRoom = ConvertToMatchesRoom(room);
+            
+            await _hubContext.Clients.Group("CustomRoomHall").SendAsync("RoomCreated", matchesRoom);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"广播房间创建失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 广播房间删除事件
+    /// </summary>
+    public static async Task BroadcastRoomDeleted(string roomID)
+    {
+        try
+        {
+            await _hubContext.Clients.Group("CustomRoomHall").SendAsync("RoomDeleted", roomID);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"广播房间删除失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 获取游戏模式
+    /// </summary>
+    private string GetGameMode(string gameMode)
+    {
+        return gameMode switch
+        {
+            "竞技模式" => "fiveVSfive",
+            "双人竞技" => "twoVStwo",
+            "单人竞技" => "oneVSone",
+            "爆头竞技" => "oneVSone_headshot",
+            _ => "fiveVSfive"
+        };
+    }
+
+    /// <summary>
+    /// 获取服务器状态
+    /// </summary>
+    private string GetServerStatus(string status)
+    {
+        return status switch
+        {
+            "NOTLINE" => "wait_create",
+            "CREATING" => "creating",
+            "ONLINE" => "running",
+            "WAITING" => "waiting",
+            "CLOSED" => "closed",
+            _ => "wait_create"
+        };
+    }
+
+    /// <summary>
+    /// 连接断开时的清理
+    /// </summary>
+    public override async Task OnDisconnectedAsync(Exception exception)
+    {
+        try
+        {
+            // 从房间更新订阅者列表中移除
+            var connectionId = Context.ConnectionId;
+            lock (_roomUpdateSubscribers)
+            {
+                if (_roomUpdateSubscribers.ContainsKey("hall"))
+                {
+                    _roomUpdateSubscribers["hall"].Remove(connectionId);
+                    if (_roomUpdateSubscribers["hall"].Count == 0)
+                    {
+                        _roomUpdateSubscribers.Remove("hall");
+                    }
+                }
+            }
+
+            await base.OnDisconnectedAsync(exception);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"连接断开处理失败: {ex.Message}");
+        }
+    }
+}
+```
+
+## 返回事件
+
+### RoomListUpdated 事件
+
+当房间列表有更新时，服务器会向所有订阅者广播 `RoomListUpdated` 事件。
+
+#### 事件名称
+`RoomListUpdated`
+
+#### 事件数据
+```json
+{
+    "rooms": [
+        {
+            "ID": "072504001",
+            "Name": "测试房间1",
+            "Type": false,
+            "OwnerID": "08233-87956-48746-16119-67337",
+            "Members": [
+                {
+                    "ConnectID": "connection123",
+                    "UID": "08233-87956-48746-16119-67337",
+                    "Name": "房主",
+                    "Avatar": "avatar_url",
+                    "SteamID": "steam_id"
+                }
+            ],
+            "Visitors": [],
+            "ReadyPlayers": [],
+            "GameSettings": {
+                "Mode": "fiveVSfive",
+                "GameMode": "Competitive",
+                "Map": "de_dust2"
+            },
+            "RoomSetting": {
+                "Password": "",
+                "MaxPlayer": 10,
+                "Player_Choose": true,
+                "GameStart": false
+            },
+            "ServerSetting": {
+                "Region": "cn-shanghai",
+                "ID": "server123",
+                "Status": "running",
+                "IP_Address": "192.168.1.100",
+                "Port": "27015",
+                "CreateTime": "2025-07-04 10:00:00"
+            },
+            "Status": "wait",
+            "CreateTime": "2025-07-04 10:00:00"
+        }
+    ],
+    "totalCount": 25,
+    "currentPage": 1,
+    "pageSize": 20,
+    "totalPages": 2,
+    "timestamp": "2025-07-04 10:30:00"
+}
+```
+
+### RoomUpdated 事件
+
+当单个房间信息有更新时，服务器会广播 `RoomUpdated` 事件。
+
+#### 事件名称
+`RoomUpdated`
+
+#### 事件数据
+```json
+{
+    "ID": "072504001",
+    "Name": "测试房间1",
+    "Type": false,
+    "OwnerID": "08233-87956-48746-16119-67337",
+    "Members": [...],
+    "Visitors": [],
+    "ReadyPlayers": [],
+    "GameSettings": {...},
+    "RoomSetting": {...},
+    "ServerSetting": {...},
+    "Status": "wait",
+    "CreateTime": "2025-07-04 10:00:00"
+}
+```
+
+### RoomCreated 事件
+
+当有新房间创建时，服务器会广播 `RoomCreated` 事件。
+
+#### 事件名称
+`RoomCreated`
+
+#### 事件数据
+```json
+{
+    "ID": "072504002",
+    "Name": "新房间",
+    "Type": false,
+    "OwnerID": "12345-67890-12345-67890-12345",
+    "Members": [...],
+    "Visitors": [],
+    "ReadyPlayers": [],
+    "GameSettings": {...},
+    "RoomSetting": {...},
+    "ServerSetting": {...},
+    "Status": "wait",
+    "CreateTime": "2025-07-04 10:35:00"
+}
+```
+
+### RoomDeleted 事件
+
+当房间被删除时，服务器会广播 `RoomDeleted` 事件。
+
+#### 事件名称
+`RoomDeleted`
+
+#### 事件数据
+```json
+"072504001"
+```
+
+## 实时更新机制
+
+### 更新触发条件
+
+1. **房间设置变更**：房主修改房间密码、游戏设置等
+2. **玩家状态变更**：玩家加入/离开房间
+3. **房间状态变更**：房间开始游戏、结束游戏
+4. **服务器状态变更**：服务器创建、启动、关闭
+5. **定时更新**：每分钟自动检查并广播更新
+
+**注意**：实时更新机制只更新第一页的房间列表，其他页面需要用户手动刷新。
+
+### 更新流程
+
+<Mermaid
+  chart="
+    graph TD
+    A[房间发生变更] --> B[触发更新事件]
+    B --> C[检查订阅者列表]
+    C --> D[广播RoomUpdated事件]
+    D --> E[前端接收更新]
+    E --> F[更新UI显示]
+    G[定时检查] --> H[获取最新房间列表]
+    H --> I[广播RoomListUpdated事件]
+    I --> J[前端更新列表]
+    "
+/>
+
+### 性能优化
+
+1. **分页加载**：只返回前20条房间数据
+2. **增量更新**：优先使用单个房间更新事件
+3. **定时更新**：每分钟检查一次，避免频繁更新
+4. **连接管理**：自动清理断开的连接
+5. **内存管理**：及时清理无效的订阅者
+
+## 错误处理
+
+### 常见错误码
+
+| 错误码 | 错误信息 | 处理方式 |
+|--------|----------|----------|
+| 1001 | 参数错误 | 检查页码是否大于等于1 |
+| 1002 | 页码超出范围 | 检查页码是否超过总页数 |
+| 1003 | 获取房间列表失败 | 检查数据库连接 |
+| 1004 | 订阅更新失败 | 检查网络连接 |
+
+### 前端错误处理示例
+
+```javascript
+    // 错误处理
+    const getRoomList = async (page = 1) => {
+        try {
+            const result = await invoke("GetMatchesRoomList", page);
+            setRoomList(result.rooms);
+            setTotalCount(result.totalCount);
+        } catch (error) {
+            console.error("获取房间列表失败:", error);
+            showErrorMessage("获取房间列表失败，请稍后重试");
+        }
+    };
+
+// 网络断开重连处理
+useEffect(() => {
+    if (!isConnected) {
+        console.log("网络连接断开，尝试重连...");
+        // 可以在这里添加重连逻辑
+    }
+}, [isConnected]);
+```
+
+## 执行流程图
+
+<Mermaid
+  chart="
+graph TD
+    A[前端调用GetMatchesRoomList] --> B[验证页码参数]
+    B --> C{页码是否有效?}
+    C -->|否| D[返回错误]
+    C -->|是| E[获取公开房间列表]
+    E --> F[转换为前端格式]
+    F --> G[添加用户到订阅者列表]
+    G --> H[加入大厅广播组]
+    H --> I[返回房间列表和总数]
+    
+    J[房间发生变更] --> K[触发更新事件]
+    K --> L[广播RoomUpdated事件]
+    L --> M[前端接收并更新UI]
+    
+    N[定时检查] --> O[获取最新房间列表]
+    O --> P[广播RoomListUpdated事件]
+    P --> Q[前端更新列表显示]
+    
+    D --> R[错误处理]
+    R --> S[显示错误信息]"
+/>
