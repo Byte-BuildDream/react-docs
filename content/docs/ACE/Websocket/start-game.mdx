@@ -1,0 +1,111 @@
+---
+title: "开始游戏"
+description: "StartGame - 创建房间服务器资源"
+---
+
+# 创建房间服务器
+
+## 接口信息
+
+- **接口名称**: `StartGame`
+- **描述**: 由房主发起的创建服务器资源函数
+- **调用方式**: SignalR Hub方法调用
+
+## 参数说明
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| roomID | string | 是 | 房间ID |
+| operatorUID | string | 是 | 操作者UID（必须是房主） |
+
+
+### 参数示例
+
+```json
+{
+    "roomID": "072504001",
+    "operatorUID": "08233-87956-48746-16119-67337"
+}
+```
+
+## 调用示例
+
+### 前端调用（TypeScript）
+
+
+```tsx
+ <Button
+    className="border border-divider bg-emerald-600 text-white w-full"
+    variant="bordered"
+    size="lg"
+    radius="sm"
+    onPress={() => {
+        invoke("StartGame", Room.id, Room.SelfUID);
+    }}
+>
+    开始游戏
+</Button>
+```
+
+## 返回事件
+### MatchesCreateServerProcess 事件
+实时向客户端反馈服务器的创建进度
+#### 参数说明
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| process | number | 是 | 0 - 100 创建进度 |
+| description | string | 是 | 描述进度 |
+
+> 附：description x process 值范围
+
+| 进度 | 说明 | 后端执行内容 |
+|--------|------|------|
+| 0 | 搜寻服务器资源中..... | 阿里云在华中[武汉]地区创建服务器资源 |
+| 20 | 搜寻服务器资源中..... | 提交服务器配置请求 |
+| 40 | 服务器创建中[服务器已确认]  | 阿里云已完成地区服务器创建 |
+| 50 | 服务器已确认  | 阿里云已完成地区服务器创建 |
+| 60 | 赛前准备中（1/3）...  | 阿里云服务器开机 |
+| 70 | 赛前准备中（2/3）...  | 阿里云服务器设置公网IP地址 |
+| 80 | 赛前准备中（3/3）...  | 等待服务器RCON连接成功 |
+| 100 | 服务器已准备完毕，可加入比赛  | 服务器已创建完成 |
+
+### MatchesCreateServerError 事件
+房间服务器创建过程中的异常事件
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| Message | string | 是 | 异常情况 |
+| details | string | 是 | 处理方案 |
+
+
+| 错误信息 | 处理方式 |
+|----------|----------|
+| 创建服务器超时 | 请稍后尝试 |
+| 暂无服务器资源 | 请稍后尝试 |
+
+
+
+### MatchesRoomServerSettingUpdate 事件
+房间服务器创建完成后，发送 MatchesServerSetting 数据
+```json
+{
+    region:0,
+    id:'dwawsd', // 阿里云服务器ID
+    status:'running', // 服务器已运行
+    iP_Address:'1.1.1.1', // 服务器IP地址
+    port:'27015', // 服务器IP地址
+    createTime:"2025-07-14 11:47:12"
+}
+
+### MatchesRoomStatusChange 事件
+房间状态更新事件
+```json
+{
+    status:0
+}
+
+
+
+
+
+
