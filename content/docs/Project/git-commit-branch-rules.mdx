@@ -1,0 +1,486 @@
+---
+title: Git提交与分支管理规范
+description: ByteDream 项目Git提交信息规范和分支管理最佳实践
+icon: GitCommit
+---
+
+# Git提交与分支管理规范
+
+<Callout type="info" title="规范概述">
+  本规范定义了Git提交信息的格式标准、分支管理策略和自动化工具配置，确保团队协作的一致性和代码管理的规范性。
+</Callout>
+
+---
+
+## 一、Commit Message规范
+
+### 为什么需要规范？
+
+<Cards>
+  <Card title="提高可读性" icon={<Eye />}>
+    标准化信息便于快速理解变更内容
+  </Card>
+  <Card title="追溯历史" icon={<History />}>
+    清晰记录每次修改的上下文
+  </Card>
+  <Card title="自动化处理" icon={<Zap />}>
+    可直接生成Change log和版本发布说明
+  </Card>
+</Cards>
+
+### 当前问题
+
+<Callout type="error" title="现有提交问题">
+  现有提交存在以下问题，需要规范化改进：
+</Callout>
+
+- 格式混乱，缺乏一致性
+- 部分提交缺少有效描述
+- 难以区分重要变更和微小调整
+
+### 规范格式
+
+```bash
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+### 格式说明
+
+| 要素 | 必填 | 说明 |
+|------|------|------|
+| `type` | ✅ | 提交类型（见下文类型表） |
+| `scope` | ❌ | 影响范围（模块/目录/功能），如auth, checkout, build |
+| `subject` | ✅ | 简短描述（50字符内） |
+| `body` | ❌ | 详细说明（72字符/行），需包含：为什么修改？如何解决？潜在影响？ |
+| `footer` | ❌ | 关联Issue（如Closes #123）或引用文档链接 |
+
+### 提交类型（type）
+
+#### 基础类型
+
+| 类型 | 使用场景 | 示例 |
+|------|----------|------|
+| `feat` | 新增功能 | `feat(auth): 添加OAuth2.0登录` |
+| `fix` | 修复BUG | `fix(api): 修复用户列表分页错误` |
+| `docs` | 文档更新 | `docs: 更新API文档` |
+| `style` | 代码格式调整 | `style: 统一代码缩进` |
+| `refactor` | 代码重构 | `refactor(utils): 重构日期处理函数` |
+| `perf` | 性能优化 | `perf(db): 优化数据库查询性能` |
+| `test` | 测试用例添加/修改 | `test(auth): 添加登录功能测试` |
+| `chore` | 构建过程或辅助工具的变动 | `chore: 更新依赖包版本` |
+| `revert` | 回退提交 | `revert: 回退到上一个版本` |
+| `build` | 打包或依赖变更 | `build: 更新webpack配置` |
+
+#### 扩展类型
+
+| 类型 | 使用场景 | 示例 |
+|------|----------|------|
+| `ci` | 持续集成/部署配置修改 | `ci: 调整GitHub Actions配置` |
+| `ui` | 用户界面/视觉调整 | `ui: 优化按钮样式和布局` |
+| `config` | 配置文件更新 | `config: 更新ESLint规则` |
+| `security` | 安全相关的修复 | `security: 修复XSS漏洞` |
+| `db` | 数据库变更 | `db: 新增用户表索引` |
+| `i18n` | 国际化/本地化相关 | `i18n: 添加英文翻译` |
+| `improve` | 功能改进 | `improve(ux): 优化用户体验` |
+
+### 优秀示例
+
+<Callout type="success" title="标准提交示例">
+  以下示例展示了规范的提交信息格式和内容。
+</Callout>
+
+#### 示例1（带作用域和详细说明）
+
+```bash
+feat(payment): 增加支付宝支付接口
+
+- 接入支付宝SDK v5.0
+- 添加支付结果回调处理
+- 更新支付文档
+
+Closes #123
+```
+
+#### 示例2（简单修复）
+
+```bash
+fix: 更正用户列表分页错误
+```
+
+#### 示例3（重构）
+
+```bash
+refactor(utils): 重构日期处理函数
+
+- 使用day.js替代moment.js
+- 减少包体积约200KB
+- 提升日期处理性能
+
+BREAKING CHANGE: 移除moment.js依赖
+```
+
+---
+
+## 二、Git分支规范
+
+### 分支策略
+
+<Callout type="error" title="保护分支">
+  master分支为受保护分支，禁止直接推送，必须通过Pull Request合并。
+</Callout>
+
+### 分支命名
+
+**格式：** `<类型>_<日期>_<功能描述>`
+
+- **类型**：feature（功能） / bugfix（修复） / refactor（重构）
+- **日期**：YYYYMMDD格式（如20240105）
+- **功能**：Snake Case命名（如user_auth）
+
+#### 正确示例
+
+```bash
+feature_20240105_oauth_login
+bugfix_20231215_cart_total
+refactor_20240110_user_service
+```
+
+#### 错误示例
+
+```bash
+feature/oauth-login          # 使用了斜杠分隔
+bugfix-cart-total           # 缺少日期
+Feature_20240105_oauth      # 首字母大写
+```
+
+### 版本发布（Tag）
+
+#### 版本号格式
+
+**格式：** `v<主版本>.<次版本>.<修订号>`
+
+- **功能新增** → 递增次版本（v1.2.0 → v1.3.0）
+- **BUG修复** → 递增修订号（v1.2.1 → v1.2.2）
+- **重大变更** → 递增主版本（v1.2.0 → v2.0.0）
+
+#### 预发布版本
+
+```bash
+v2.0.0-alpha.1    # 第1次alpha测试
+v2.0.0-beta.3     # 第3次beta测试
+v2.0.0-rc.1       # 第1次候选发布
+```
+
+#### 发布流程
+
+<Mermaid
+  chart="
+graph LR
+A[合并到master] --> B[生成CHANGELOG]
+B --> C[打Tag]
+C --> D[CI/CD发布]
+D --> E[部署到生产环境]"
+/>
+
+---
+
+## 三、工具支持
+
+### 自动验证配置
+
+通过 husky + commitlint 强制校验：
+
+<Callout type="info" title="自动化配置">
+  配置自动化工具可以强制团队遵循提交规范，提高代码质量。
+</Callout>
+
+#### 安装依赖
+
+```bash
+npm install -D husky @commitlint/config-conventional @commitlint/cli
+```
+
+#### 配置commitlint
+
+```javascript
+// .commitlintrc.js
+module.exports = {
+  extends: ['@commitlint/config-conventional'],
+  rules: {
+    'type-enum': [
+      2,
+      'always',
+      [
+        'feat',
+        'fix',
+        'docs',
+        'style',
+        'refactor',
+        'perf',
+        'test',
+        'chore',
+        'revert',
+        'build',
+        'ci',
+        'ui',
+        'config',
+        'security',
+        'db',
+        'i18n',
+        'improve'
+      ]
+    ],
+    'subject-case': [2, 'always', 'lower-case'],
+    'subject-max-length': [2, 'always', 50],
+    'body-max-line-length': [2, 'always', 72]
+  }
+}
+```
+
+#### 设置git钩子
+
+```bash
+# 初始化husky
+npx husky install
+
+# 添加commit-msg钩子
+npx husky add .husky/commit-msg 'npx --no-install commitlint --edit $1'
+
+# 添加pre-commit钩子（可选）
+npx husky add .husky/pre-commit 'npm run lint'
+```
+
+### 自动化脚本
+
+#### package.json 脚本
+
+```json
+{
+  "scripts": {
+    "commit": "git-cz",
+    "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
+    "release": "standard-version",
+    "lint:commit": "commitlint --edit"
+  }
+}
+```
+
+#### 生成变更日志
+
+```bash
+# 生成CHANGELOG.md
+npm run changelog
+
+# 自动发布版本
+npm run release
+```
+
+---
+
+## 四、最佳实践
+
+### 提交信息写作技巧
+
+<Cards>
+  <Card title="使用命令语气" icon={<Terminal />}>
+    用"Fix"而非"Fixed"，用"Add"而非"Added"
+  </Card>
+  <Card title="首字母不大写" icon={<Type />}>
+    保持小写，如"fix"而非"Fix"
+  </Card>
+  <Card title="不加句号结尾" icon={<Minus />}>
+    简洁明了，不加标点符号
+  </Card>
+  <Card title="描述要具体" icon={<FileText />}>
+    说明做了什么，而不是为什么做
+  </Card>
+</Cards>
+
+### 分支管理最佳实践
+
+#### 1. 分支生命周期
+
+<Callout type="info" title="分支管理流程">
+  遵循标准的分支生命周期，确保代码质量和团队协作效率。
+</Callout>
+
+1. **创建分支**：从正确的源分支创建
+2. **开发阶段**：在分支上进行开发，定期同步主分支
+3. **代码审查**：提交Pull Request进行代码审查
+4. **合并阶段**：审查通过后合并到目标分支
+5. **清理阶段**：删除已合并的分支
+
+#### 2. 分支保护规则
+
+- **主分支保护**
+  - 禁止直接推送到 `master` 分支
+  - 必须通过Pull Request合并
+  - 需要至少一名审查者批准
+  - 必须通过CI/CD检查
+
+- **开发分支保护**
+  - 禁止直接推送到 `develop` 分支
+  - 必须通过Pull Request合并
+  - 需要代码审查通过
+
+#### 3. 分支同步策略
+
+- **定期同步主分支**
+  - 每周至少同步一次主分支
+  - 及时解决合并冲突
+  - 保持分支的最新状态
+
+- **避免长期分支**
+  - 特性分支不应超过2周
+  - 及时合并或删除过期分支
+  - 定期清理废弃分支
+
+### 注意事项
+
+<Callout type="warn" title="重要提醒">
+  以下事项需要特别注意，确保规范的严格执行。
+</Callout>
+
+- **超过2个文件的修改必须写body**
+- **重大变更需在footer关联Issue或文档**
+- **发布前必须生成CHANGELOG**
+- **提交前必须通过代码审查**
+- **禁止在master分支直接开发**
+
+---
+
+## 五、常见问题
+
+### Q: 如何写好的提交信息？
+
+A: 
+1. 用命令语气（如"Fix"而非"Fixed"）
+2. 首字母不大写
+3. 不加句号结尾
+4. 描述要具体，说明做了什么
+
+### Q: 如何处理紧急修复？
+
+A:
+1. 从 `master` 分支创建 `bugfix_YYYYMMDD_问题描述` 分支
+2. 快速修复问题并测试
+3. 提交规范的修复信息
+4. 合并到 `master` 分支进行紧急部署
+5. 同时合并到 `develop` 分支保持同步
+
+### Q: 如何回滚错误的提交？
+
+A:
+1. 使用 `git log` 找到提交的哈希
+2. 使用 `git revert <commit-hash>` 创建回滚提交
+3. 推送回滚提交到远程仓库
+
+### Q: 如何处理合并冲突？
+
+A:
+1. 使用 `git status` 查看冲突文件
+2. 手动编辑冲突文件，选择正确的代码
+3. 使用 `git add` 标记冲突已解决
+4. 使用 `git commit` 完成合并
+
+### Q: 如何管理长期分支？
+
+A:
+1. 定期同步主分支的更新
+2. 及时解决合并冲突
+3. 考虑将大功能拆分为小分支
+4. 定期评估分支的必要性
+
+---
+
+## 六、工具推荐
+
+### Git客户端工具
+
+<Cards>
+  <Card title="GitHub Desktop" icon={<Monitor />}>
+    图形化Git客户端，适合初学者
+  </Card>
+  <Card title="SourceTree" icon={<GitBranch />}>
+    免费的Git客户端，功能丰富
+  </Card>
+  <Card title="GitKraken" icon={<Zap />}>
+    功能强大的Git客户端
+  </Card>
+  <Card title="VS Code Git" icon={<Code />}>
+    编辑器集成Git功能
+  </Card>
+</Cards>
+
+### 自动化工具
+
+- **husky** - Git钩子管理
+- **commitlint** - 提交信息验证
+- **conventional-changelog** - 自动生成变更日志
+- **standard-version** - 自动版本发布
+- **commitizen** - 交互式提交工具
+
+### CI/CD集成
+
+- **GitHub Actions** - GitHub CI/CD
+- **GitLab CI** - GitLab CI/CD
+- **Jenkins** - 持续集成
+- **Travis CI** - 云CI服务
+
+---
+
+## 七、团队协作
+
+### 1. 代码审查流程
+
+1. **提交Pull Request**
+2. **指定审查者**
+3. **进行代码审查**
+4. **解决审查意见**
+5. **批准并合并**
+
+### 2. 团队沟通
+
+- 使用分支名称描述功能
+- 在提交信息中说明变更原因
+- 及时通知相关人员分支状态
+- 定期进行分支清理
+
+### 3. 培训和维护
+
+- 新成员入职培训
+- 定期规范更新
+- 收集团队反馈
+- 持续改进流程
+
+---
+
+## 八、监控和维护
+
+### 1. 提交质量监控
+
+- 定期检查提交信息质量
+- 监控分支数量和使用情况
+- 评估规范执行效果
+- 收集团队反馈
+
+### 2. 持续改进
+
+- 根据项目需求调整规范
+- 优化自动化工具配置
+- 更新最佳实践
+- 培训团队成员
+
+---
+
+*通过本文档，团队可以：*
+1. **统一代码提交风格**
+2. **规范分支管理流程**
+3. **实现自动化版本发布**
+4. **建议配合CI工具（如Jenkins/GitHub Actions）执行自动化验证**
+
+*如有疑问请联系项目管理员。* 

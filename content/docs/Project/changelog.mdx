@@ -1,0 +1,202 @@
+---
+title: 变更日志
+description: ByteDream 项目变更记录和版本历史
+icon: FileText
+---
+
+# 变更日志
+
+本项目遵循 [语义化版本控制](https://semver.org/lang/zh-CN/) 规范。
+
+<Callout type="info">
+  变更日志记录了项目的所有重要变更，包括新功能、修复、改进和破坏性变更。
+</Callout>
+
+## [未发布]
+
+### 新增
+- 新功能描述
+
+### 修改
+- 功能改进描述
+
+### 修复
+- 问题修复描述
+
+### 破坏性变更
+- 不兼容的API变更
+
+## [1.0.0] - 2023-12-01
+
+### 新增
+- 项目初始功能
+- 核心功能模块
+- 基础架构组件
+
+### 技术特性
+- 技术栈描述
+- 架构设计说明
+- 性能特性
+
+---
+
+## 版本说明
+
+<Cards>
+  <Card title="主版本号" icon={<FileText />}>
+    重大架构变更或不兼容的API修改
+  </Card>
+  <Card title="次版本号" icon={<Plus />}>
+    向下兼容的功能性新增
+  </Card>
+  <Card title="修订号" icon={<Wrench />}>
+    向下兼容的问题修正
+  </Card>
+</Cards>
+
+## 发布类型
+
+<Cards>
+  <Card title="正式版本" icon={<CheckCircle />}>
+    <code>1.0.0</code> - 功能完整，经过充分测试
+  </Card>
+  <Card title="预发布版本" icon={<AlertTriangle />}>
+    <code>1.0.0-beta.1</code> - 测试版本
+  </Card>
+  <Card title="热修复版本" icon={<Zap />}>
+    <code>1.0.1</code> - 紧急问题修复
+  </Card>
+</Cards>
+
+## 变更类型说明
+
+### 新增 (Added)
+<Callout type="success" title="新功能">
+  包括新功能、新模块、新API、新增的配置选项和依赖库
+</Callout>
+
+- 新功能、新模块、新API
+- 新增的配置选项
+- 新增的依赖库
+
+### 修改 (Changed)
+<Callout type="info" title="功能改进">
+  包括现有功能的改进、性能优化、用户体验改进和配置格式变更
+</Callout>
+
+- 现有功能的改进
+- 性能优化
+- 用户体验改进
+- 配置格式变更
+
+### 修复 (Fixed)
+<Callout type="warn" title="问题修复">
+  包括Bug修复、安全漏洞修复和兼容性问题修复
+</Callout>
+
+- Bug修复
+- 安全漏洞修复
+- 兼容性问题修复
+
+### 破坏性变更 (Breaking Changes)
+<Callout type="error" title="不兼容变更">
+  这些变更可能导致现有代码无法正常工作，需要特别注意
+</Callout>
+
+- 不兼容的API变更
+- 移除过时的功能
+- 配置格式的重大变更
+
+### 移除 (Removed)
+<Callout type="warn" title="功能移除">
+  已废弃的功能、不再支持的配置选项和移除的依赖库
+</Callout>
+
+- 已废弃的功能
+- 不再支持的配置选项
+- 移除的依赖库
+
+---
+
+## 贡献指南
+
+在提交代码时，请遵循以下规范：
+
+### 提交信息格式
+
+```bash
+类型(范围): 简短描述
+
+详细描述（可选）
+
+关联问题: #123
+```
+
+### 类型说明
+
+<Cards>
+  <Card title="feat" icon={<Plus />}>
+    新功能
+  </Card>
+  <Card title="fix" icon={<Wrench />}>
+    问题修复
+  </Card>
+  <Card title="docs" icon={<FileText />}>
+    文档更新
+  </Card>
+  <Card title="style" icon={<Palette />}>
+    代码格式调整
+  </Card>
+  <Card title="refactor" icon={<Code />}>
+    代码重构
+  </Card>
+  <Card title="test" icon={<TestTube />}>
+    测试相关
+  </Card>
+  <Card title="chore" icon={<Settings />}>
+    构建过程或辅助工具的变动
+  </Card>
+  <Card title="perf" icon={<Zap />}>
+    性能优化
+  </Card>
+  <Card title="ci" icon={<GitBranch />}>
+    CI/CD相关
+  </Card>
+  <Card title="build" icon={<Package />}>
+    构建系统相关
+  </Card>
+  <Card title="revert" icon={<RotateCcw />}>
+    回滚提交
+  </Card>
+</Cards>
+
+### 变更日志更新
+
+<Callout type="info" title="更新要求">
+  所有变更都应在CHANGELOG.md中记录，使用清晰的分类标签，提供详细的变更说明
+</Callout>
+
+---
+
+## 版本历史
+
+| 版本 | 发布日期 | 主要变更 |
+|------|----------|----------|
+| 1.0.0 | 2023-12-01 | 初始版本发布 |
+
+---
+
+## 相关文档
+
+<Cards>
+  <Card title="版本发布规则" href="/docs/Project/version-release-rules" icon={<BookOpen />}>
+    详细的版本号命名规则、发布流程和版本管理规范
+  </Card>
+  <Card title="开发规范" href="/docs/Project" icon={<Code />}>
+    项目开发规范和最佳实践
+  </Card>
+</Cards>
+
+---
+
+*更多详细信息请参考 [版本发布规则文档](./version-release-rules)* 
