@@ -1,0 +1,26 @@
+---
+title: 比赛记录表
+description: 记录比赛基础、成员信息以及相关配套资源情况
+icon: Database
+---
+
+# 比赛记录表结构
+
+
+|      名称      |    类型     |      说明      |       示例值        |         备注         |
+| :------------: | :---------: | :------------: | :-----------------: | :------------------: |
+|    MatchID     |   varchar   |   比赛唯一ID   |    1756703719057    |        时间戳        |
+|      Mode      |   varchar   |    游戏模式    |       Default       |  Default\Double\Elo  |
+|      Map       |   varchar   |      地图      |       Dust II       |                      |
+|    Avg_Rank    |   float4    |      均分      |        18.64        |       非负均分       |
+|     Status     |   varchar   |    比赛状态    |       进行中        |  进行中、取消、结束  |
+|  TeamA_Score   |   varchar   |  Team A 得分   |          6          |                      |
+|  TeamB_Score   |     int     |  Team B 得分   |          3          |                      |
+|   Award_Drop   |    bool     | 是否已发放奖励 |        false        |      默认:false      |
+| Server_Recycle |    bool     | 服务器是否回收 |        false        |      默认:false      |
+|  Plugin_Init   |    bool     | 是否初始化成功 |        false        |      默认:false      |
+|  Demo_Status   |   varchar   |   Demo 情况    |       未上传        | 未上传、解析中、就绪 |
+|  TeamA_Member  |  varchar[]  |  Team A 成员   |       ------        |                      |
+|  TeamB_Member  |  varchar[]  |  Team B 成员   |       ------        |                      |
+|  Updata_Time   | timestamptz |  最后更新时间  | 2025-09-03 11:26:00 |        UTC-8         |
+|  Create_Time   | timestamptz |  创建比赛时间  | 2025-09-03 11:18:00 |        UTC-8         |
