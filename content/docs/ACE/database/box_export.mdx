@@ -1,0 +1,102 @@
+---
+title: 武器箱出货限制
+description: 限制武器箱创建订单最高价格、是否禁止出货
+icon: Box
+---
+
+
+### 数据库表：
+
+名称：box_export
+
+定义：武器箱出货信息表
+
+|  字段名称  |   类型    |       解释       |               说明               |
+| :--------: | :-------: | :--------------: | :------------------------------: |
+|   itemId   |   text    |      物品ID      |    易平台唯一识别物品ID，必须    |
+|  itemName  |   text    |     物品名称     |               必须               |
+|  imageUrl  |   text    | 物品图片网络地址 |               必须               |
+|  maxPrice  |   float   | 物品最高购买价格 | 虚拟货币（T币）结算，默认值：0.8 |
+| isDisabled |   bool    |   是否禁用出货   |          默认值：false           |
+| created_at | timestamp |     创建日期     |     系统自动生成，读取时生成     |
+
+### CRUD 函数
+
+对象定义文件位置：lib\interface\manager\BoxExportInterface.ts
+
+函数定义文件位置：lib\func\manager\BoxExportFunc.ts
+
+#### 读取所有武器箱限制
+
+- **名称**：GetAllBoxExport
+- **解释**：获取表中记录的所有数据
+- **参数**：无
+- **返回**：`Box_Export[]` 类型数组 - 包含所有武器箱出货信息的数组
+
+#### 添加武器箱限制
+
+- **名称**：AddBoxExport
+- **解释**：向 `box_export` 表添加新的限制
+- **参数**：`Box_Export` 对象 - 包含需要添加的武器箱出货信息
+- **返回**：`bool` 类型 - 表示是否成功完成添加操作的布尔值
+
+#### 读取指定武器箱限制信息
+
+- **名称**：GetBoxExportByID
+- **解释**：通过 ID 获取武器箱限制信息
+- **参数**：`itemId` (text) - 武器箱唯一标识符
+- **返回**：`Box_Export` 对象 - 返回与指定 ID 相关联的武器箱出货信息
+
+### 错误处理
+
+- 所有函数应考虑处理以下类型的错误：
+  - **参数验证错误**：检查提供的参数是否符合预期格式和规则。
+  - **数据库连接错误**：确保可以成功连接到数据库并处理请求。
+  - **查询错误**：执行数据库查询时出现的错误，例如无记录或语法错误。
+
+### 示例代码
+
+#### 获取所有武器箱限制示例
+
+```typescript
+async function fetchAllBoxes() {
+    const allBoxes: Box_Export[] = await GetAllBoxExport();
+    console.log(allBoxes);
+}
+```
+
+#### 添加武器箱限制示例
+
+```typescript
+async function addNewBox() {
+    const newBox: Box_Export = {
+        itemId: "123456",
+        itemName: "新武器箱",
+        imageUrl: "http://example.com/image.png",
+        maxPrice: 0.8,
+        isDisabled: false,
+    };
+    
+    const isAdded: boolean = await AddBoxExport(newBox);
+    if (isAdded) {
+        console.log("添加成功");
+    } else {
+        console.log("添加失败");
+    }
+}
+```
+
+#### 读取特定武器箱限制信息示例
+
+```typescript
+async function fetchBoxById(itemId: string) {
+    const box: Box_Export = await GetBoxExportByID(itemId);
+    console.log(box);
+}
+```
+
+### 附加说明
+
+- 数据库操作应包含事务处理，确保在执行插入、更新和删除操作时的一致性。
+- 可考虑添加日志记录功能，以追踪所有CRUD操作以便于调试和监控。
+
