@@ -1,0 +1,9 @@
+{
+    "title": "生产力",
+    "description": "ByteDream 生产力工具和资源",
+    "icon": "Building",
+    "root": true,
+    "pages": [
+      "..."
+    ]
+  } 

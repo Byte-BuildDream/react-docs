@@ -1,0 +1,288 @@
+---
+title: Shadcn/ui 样式
+description: 自定义ShadCN/UI的主题
+---
+
+# Shadcn/ui 样式指南
+
+## 概述
+
+Shadcn/ui 是一个基于 Radix UI 和 Tailwind CSS 构建的现代组件库，提供了美观、可访问且高度可定制的 UI 组件。
+
+## 核心特性
+
+- **可复制粘贴**: 组件代码直接复制到项目中，而非通过 npm 安装
+- **完全可定制**: 基于 Tailwind CSS，可以轻松修改样式
+- **TypeScript 支持**: 完整的类型定义
+- **可访问性**: 基于 Radix UI 构建，内置无障碍支持
+- **主题系统**: 支持明暗主题切换
+
+## 安装与配置
+
+### 1. 初始化项目
+
+```bash
+npx shadcn-ui@latest init
+```
+
+### 2. 配置文件
+
+项目会自动创建 `components.json` 配置文件：
+
+```json
+{
+  "style": "default",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "tailwind.config.js",
+    "css": "app/globals.css",
+    "baseColor": "slate",
+    "cssVariables": true
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils"
+  }
+}
+```
+
+### 3. 添加组件
+
+```bash
+npx shadcn-ui@latest add button
+npx shadcn-ui@latest add card
+npx shadcn-ui@latest add input
+```
+
+## 主题定制
+
+### CSS 变量主题
+
+Shadcn/ui 使用 CSS 变量来管理主题，可以在 `globals.css` 中自定义：
+
+```css
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+```
+
+### 自定义颜色方案
+
+您可以根据品牌需求自定义颜色：
+
+```css
+:root {
+  --primary: 142 76% 36%;        /* 绿色主题 */
+  --primary-foreground: 355.7 100% 97.3%;
+  --secondary: 240 4.8% 95.9%;
+  --secondary-foreground: 240 5.9% 10%;
+}
+```
+
+## 常用组件示例
+
+### Button 组件
+
+```tsx
+import { Button } from "@/components/ui/button"
+
+export function ButtonDemo() {
+  return (
+    <div className="flex gap-4">
+      <Button>默认按钮</Button>
+      <Button variant="secondary">次要按钮</Button>
+      <Button variant="destructive">危险按钮</Button>
+      <Button variant="outline">轮廓按钮</Button>
+      <Button variant="ghost">幽灵按钮</Button>
+      <Button variant="link">链接按钮</Button>
+    </div>
+  )
+}
+```
+
+### Card 组件
+
+```tsx
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+
+export function CardDemo() {
+  return (
+    <Card className="w-[350px]">
+      <CardHeader>
+        <CardTitle>创建项目</CardTitle>
+        <CardDescription>部署您的新项目只需一步。</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form>
+          <div className="grid w-full items-center gap-4">
+            <div className="flex flex-col space-y-1.5">
+              <Label htmlFor="name">名称</Label>
+              <Input id="name" placeholder="项目名称" />
+            </div>
+          </div>
+        </form>
+      </CardContent>
+      <CardFooter className="flex justify-between">
+        <Button variant="outline">取消</Button>
+        <Button>部署</Button>
+      </CardFooter>
+    </Card>
+  )
+}
+```
+
+### Input 组件
+
+```tsx
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+
+export function InputDemo() {
+  return (
+    <div className="grid w-full max-w-sm items-center gap-1.5">
+      <Label htmlFor="email">邮箱</Label>
+      <Input type="email" id="email" placeholder="Email" />
+    </div>
+  )
+}
+```
+
+## 响应式设计
+
+Shadcn/ui 组件完全支持 Tailwind CSS 的响应式断点：
+
+```tsx
+<Card className="w-full md:w-[350px] lg:w-[400px]">
+  <CardHeader>
+    <CardTitle className="text-lg md:text-xl lg:text-2xl">
+      响应式标题
+    </CardTitle>
+  </CardHeader>
+</Card>
+```
+
+## 最佳实践
+
+### 1. 组件组合
+
+```tsx
+// 推荐：使用组合模式
+<Card>
+  <CardHeader>
+    <CardTitle>标题</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <p>内容</p>
+  </CardContent>
+</Card>
+
+// 避免：直接修改组件内部结构
+```
+
+### 2. 样式扩展
+
+```tsx
+// 推荐：通过 className 扩展样式
+<Button className="w-full bg-gradient-to-r from-blue-500 to-purple-600">
+  渐变按钮
+</Button>
+
+// 避免：直接修改组件源码
+```
+
+### 3. 主题切换
+
+```tsx
+import { useTheme } from "next-themes"
+
+export function ThemeToggle() {
+  const { theme, setTheme } = useTheme()
+
+  return (
+    <Button
+      variant="outline"
+      size="icon"
+      onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+    >
+      {theme === "light" ? "🌙" : "☀️"}
+    </Button>
+  )
+}
+```
+
+## 推荐资源
+
+- [Shadcn/ui 官方文档](https://ui.shadcn.com/)
+- [Radix UI 组件库](https://www.radix-ui.com/)
+- [Tailwind CSS 文档](https://tailwindcss.com/)
+- [Lucide React 图标库](https://lucide.dev/)
+
+## 总结
+
+Shadcn/ui 为现代 React 应用提供了一个强大而灵活的 UI 组件系统。通过其可复制粘贴的架构和基于 Tailwind CSS 的样式系统，开发者可以快速构建美观且功能完整的用户界面。
+
+
+## 相关衍生
+Shadcn/ui 组件的自定义样式、风格
+
+### 主题样式生成
+
+#### Tweakcn
+
+![Tweakcn](https://ph-files.imgix.net/39999c9d-606f-4151-abee-35bca07d0da2.png?auto=compress&codec=mozjpeg&cs=strip&auto=format&fm=pjpg&w=1100&h=578&fit=max&frame=1&dpr=1)
+![Tweakcn](https://ph-files.imgix.net/e9cf0d6c-5808-40d5-a9c3-d7b1a8d9eeff.png?auto=compress&codec=mozjpeg&cs=strip&auto=format&fm=pjpg&w=1100&h=578&fit=max&frame=1&dpr=1)
+
+<Card
+    href="https://tweakcn.com/"
+    title="Tweakcn"
+>
+    通过实时预览自定义颜色，版式和布局
+    - 实时预览
+    - 导出为 TailwindCSS 配置
+    - 众多受欢迎的样式
+</Card>
